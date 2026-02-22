@@ -2,8 +2,7 @@ use auth_service::Application;
 
 #[tokio::main]
 async fn main() {
-    let assets_dir = tower_http::services::ServeDir::new("assets");
-    let app = Application::build("0.0.0.0:3000", assets_dir)
+    let app = Application::build("0.0.0.0:3000")
         .await
         .expect("Failed to build app");
 
