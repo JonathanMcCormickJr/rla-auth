@@ -1,13 +1,15 @@
 use axum::{
-    response::IntoResponse,
     Router,
     routing::post,
     serve,
 };
-use reqwest::StatusCode;
 use std::error::Error;
 use tokio::net::TcpListener;
 use tower_http::services::{ ServeDir, ServeFile };
+
+pub mod routes;
+
+use routes::signup::signup;
 
 // This struct encapsulates our application-related logic.
 pub struct Application {
@@ -22,8 +24,11 @@ impl Application {
         let assets_dir = ServeDir::new("assets").not_found_service(ServeFile::new("assets/index.html"));
 
         let router = Router::new().fallback_service(assets_dir)
-            // TODO: Add all other routes
-            .route("/signup", post(signup)); // Example route;
+            .route("/signup", post(signup))
+            .route("/login", post(routes::login::login))
+            .route("/logout", post(routes::logout::logout))
+            .route("/verify-2fa", post(routes::verify_2fa::verify_2fa))
+            .route("/verify-token", post(routes::verify_token::verify_token));
         let listener = tokio::net::TcpListener::bind(address).await?;
         let address = listener.local_addr()?.to_string();
         let server = axum::serve(listener, router);
@@ -36,11 +41,3 @@ impl Application {
         self.server.await
     }
 }
-
-// Example route handler.
-// For now we will simply return a 200 (OK) status code.
-async fn signup() -> impl IntoResponse {
-    StatusCode::OK.into_response()
-}
-
-// TODO: Add all other route handlers

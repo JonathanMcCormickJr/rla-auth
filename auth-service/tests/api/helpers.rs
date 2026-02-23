@@ -33,5 +33,43 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
-    // TODO: Implement helper functions for all other routes (signup, login, logout, verify-2fa, and verify-token)
+    pub async fn post_signup(&self) -> reqwest::Response {
+        self.http_client
+            .post(&format!("{}/signup", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn post_login(&self) -> reqwest::Response {
+        self.http_client
+            .post(&format!("{}/login", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn post_logout(&self) -> reqwest::Response {
+        self.http_client
+            .post(&format!("{}/logout", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn post_verify_2fa(&self) -> reqwest::Response {
+        self.http_client
+            .post(&format!("{}/verify-2fa", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn post_verify_token(&self) -> reqwest::Response {
+        self.http_client
+            .post(&format!("{}/verify-token", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
 }
