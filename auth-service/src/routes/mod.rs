@@ -14,5 +14,4 @@ pub use signup::*;
 pub use verify_2fa::*;
 pub use verify_token::*;
 
-
 // TODO: Add all other route handlers within respective modules (login, logout, verify-2fa, and verify-token)

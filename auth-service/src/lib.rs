@@ -1,11 +1,7 @@
-use axum::{
-    Router,
-    routing::post,
-    serve,
-};
+use axum::{routing::post, serve, Router};
 use std::error::Error;
 use tokio::net::TcpListener;
-use tower_http::services::{ ServeDir, ServeFile };
+use tower_http::services::{ServeDir, ServeFile};
 
 pub mod routes;
 
@@ -21,9 +17,11 @@ pub struct Application {
 
 impl Application {
     pub async fn build(address: &str) -> Result<Self, Box<dyn Error>> {
-        let assets_dir = ServeDir::new("assets").not_found_service(ServeFile::new("assets/index.html"));
+        let assets_dir =
+            ServeDir::new("assets").not_found_service(ServeFile::new("assets/index.html"));
 
-        let router = Router::new().fallback_service(assets_dir)
+        let router = Router::new()
+            .fallback_service(assets_dir)
             .route("/signup", post(signup))
             .route("/login", post(routes::login::login))
             .route("/logout", post(routes::logout::logout))

@@ -1,5 +1,7 @@
 use auth_service::Application;
 use reqwest::Client;
+use serde_json::json;
+use uuid::Uuid;
 
 pub struct TestApp {
     pub address: String,
@@ -15,14 +17,17 @@ impl TestApp {
         let address = format!("http://{}", app.address.clone());
 
         // Run the auth service in a separate async task
-        // to avoid blocking the main test thread. 
+        // to avoid blocking the main test thread.
         #[allow(clippy::let_underscore_future)]
         let _ = tokio::spawn(app.run());
 
         let http_client = Client::new();
 
         // Create new `TestApp` instance and return it
-        Self { address, http_client }
+        Self {
+            address,
+            http_client,
+        }
     }
 
     pub async fn get_root(&self) -> reqwest::Response {
@@ -34,8 +39,19 @@ impl TestApp {
     }
 
     pub async fn post_signup(&self) -> reqwest::Response {
+        let body = json!({
+            "email": get_random_email(),
+            "password": "password123",
+            "requires2FA": true
+        });
+
+        self.post_signup_with_body(&body).await
+    }
+
+    pub async fn post_signup_with_body(&self, body: &serde_json::Value) -> reqwest::Response {
         self.http_client
             .post(&format!("{}/signup", &self.address))
+            .json(body)
             .send()
             .await
             .expect("Failed to execute request.")
@@ -72,4 +88,9 @@ impl TestApp {
             .await
             .expect("Failed to execute request.")
     }
+}
+
+pub fn get_random_email() -> String {
+    let random_uuid = Uuid::new_v4();
+    format!("{}@example.com", random_uuid)
 }
