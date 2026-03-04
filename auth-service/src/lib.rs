@@ -3,9 +3,17 @@ use std::error::Error;
 use tokio::net::TcpListener;
 use tower_http::services::{ServeDir, ServeFile};
 
+pub mod app_state;
+mod domain;
 pub mod routes;
+pub mod services;
 
+use app_state::AppState;
+use routes::login::login;
+use routes::logout::logout;
 use routes::signup::signup;
+use routes::verify_2fa::verify_2fa;
+use routes::verify_token::verify_token;
 
 // This struct encapsulates our application-related logic.
 pub struct Application {
@@ -16,17 +24,19 @@ pub struct Application {
 }
 
 impl Application {
-    pub async fn build(address: &str) -> Result<Self, Box<dyn Error>> {
+    pub async fn build(app_state: AppState, address: &str) -> Result<Self, Box<dyn Error>> {
         let assets_dir =
             ServeDir::new("assets").not_found_service(ServeFile::new("assets/index.html"));
 
         let router = Router::new()
-            .fallback_service(assets_dir)
+            .route("/login", post(login))
+            .route("/logout", post(logout))
             .route("/signup", post(signup))
-            .route("/login", post(routes::login::login))
-            .route("/logout", post(routes::logout::logout))
-            .route("/verify-2fa", post(routes::verify_2fa::verify_2fa))
-            .route("/verify-token", post(routes::verify_token::verify_token));
+            .route("/verify-2fa", post(verify_2fa))
+            .route("/verify-token", post(verify_token))
+            .fallback_service(assets_dir)
+            .with_state(app_state);
+          
         let listener = tokio::net::TcpListener::bind(address).await?;
         let address = listener.local_addr()?.to_string();
         let server = axum::serve(listener, router);

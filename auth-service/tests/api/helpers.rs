@@ -10,7 +10,14 @@ pub struct TestApp {
 
 impl TestApp {
     pub async fn new() -> Self {
-        let app = Application::build("127.0.0.1:0")
+        let user_store = auth_service::services::hashmap_user_store::HashmapUserStore::default();
+        let app_state = auth_service::app_state::AppState::new(
+            std::sync::Arc::new(tokio::sync::RwLock::new(
+                user_store,
+            )) as auth_service::app_state::UserStoreType,
+        );
+
+        let app = Application::build(app_state, "0.0.0.0:0")
             .await
             .expect("Failed to build app");
 
