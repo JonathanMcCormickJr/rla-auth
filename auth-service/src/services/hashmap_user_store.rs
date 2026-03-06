@@ -1,14 +1,6 @@
 use std::collections::HashMap;
 
-use crate::domain::User;
-
-#[derive(Debug, PartialEq)]
-pub enum UserStoreError {
-    UserAlreadyExists,
-    UserNotFound,
-    InvalidCredentials,
-    UnexpectedError,
-}
+use crate::domain::{ User, UserStoreError, data_stores::UserStore };
 
 #[derive(Default)]
 pub struct HashmapUserStore {
@@ -46,6 +38,21 @@ impl HashmapUserStore {
             }
             None => Err(UserStoreError::UserNotFound),
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl UserStore for HashmapUserStore {
+    async fn add_user(&mut self, user: User) -> Result<(), UserStoreError> {
+        self.add_user(user)
+    }
+
+    async fn get_user(&self, email: &str) -> Result<User, UserStoreError> {
+        self.get_user(email)
+    }
+
+    async fn validate_user(&self, email: &str, password: &str) -> Result<(), UserStoreError> {
+        self.validate_user(email, password)
     }
 }
 

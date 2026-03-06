@@ -7,12 +7,12 @@ use crate::services::hashmap_user_store::HashmapUserStore;
 pub type UserStoreType = Arc<RwLock<HashmapUserStore>>;
 
 #[derive(Clone)]
-pub struct AppState {
-    pub user_store: UserStoreType,
+pub struct AppState<T: Send + Sync> {
+    pub user_store: T,
 }
 
-impl AppState {
-    pub fn new(user_store: UserStoreType) -> Self {
+impl<T: Send + Sync> AppState<T> {
+    pub fn new(user_store: T) -> Self {
         Self { user_store }
     }
 }

@@ -1,12 +1,12 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use crate::{
-    app_state::AppState,
+    app_state::{AppState, UserStoreType},
     domain::{AuthAPIError, User},
 };
 
 pub async fn signup(
-    State(state): State<AppState>,
+    State(state): State<AppState<UserStoreType>>,
     Json(request): Json<SignupRequest>,
 ) -> Result<impl IntoResponse, AuthAPIError> {
     // Create a new `User` instance using data in the `request`

@@ -16,7 +16,7 @@ mod domain;
 pub mod routes;
 pub mod services;
 
-use app_state::AppState;
+use app_state::{AppState, UserStoreType};
 use routes::login::login;
 use routes::logout::logout;
 use routes::signup::signup;
@@ -32,7 +32,10 @@ pub struct Application {
 }
 
 impl Application {
-    pub async fn build(app_state: AppState, address: &str) -> Result<Self, Box<dyn Error>> {
+    pub async fn build(
+        app_state: AppState<UserStoreType>,
+        address: &str,
+    ) -> Result<Self, Box<dyn Error>> {
         let assets_dir =
             ServeDir::new("assets").not_found_service(ServeFile::new("assets/index.html"));
 
