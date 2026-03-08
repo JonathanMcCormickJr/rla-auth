@@ -11,11 +11,10 @@ pub struct TestApp {
 impl TestApp {
     pub async fn new() -> Self {
         let user_store = auth_service::services::hashmap_user_store::HashmapUserStore::default();
-        let app_state = auth_service::app_state::AppState::new(
-            std::sync::Arc::new(tokio::sync::RwLock::new(
-                user_store,
-            )) as auth_service::app_state::UserStoreType,
-        );
+        let app_state = auth_service::app_state::AppState::new(std::sync::Arc::new(
+            tokio::sync::RwLock::new(user_store),
+        )
+            as auth_service::app_state::UserStoreType);
 
         let app = Application::build(app_state, "0.0.0.0:0")
             .await
@@ -48,7 +47,7 @@ impl TestApp {
     pub async fn post_signup(&self) -> reqwest::Response {
         let body = json!({
             "email": get_random_email(),
-            "password": "password123",
+            "password": "Password123!",
             "requires2FA": true
         });
 

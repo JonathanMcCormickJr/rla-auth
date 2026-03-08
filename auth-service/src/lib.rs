@@ -47,7 +47,7 @@ impl Application {
             .route("/verify-token", post(verify_token))
             .fallback_service(assets_dir)
             .with_state(app_state);
-          
+
         let listener = tokio::net::TcpListener::bind(address).await?;
         let address = listener.local_addr()?.to_string();
         let server = axum::serve(listener, router);

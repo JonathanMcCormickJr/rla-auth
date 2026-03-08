@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
-use crate::domain::{ User, UserStoreError, data_stores::UserStore };
+use crate::domain::{
+    data_stores::UserStore, email::Email, password::Password, User, UserStoreError,
+};
 
 #[derive(Default)]
 pub struct HashmapUserStore {
-    users: HashMap<String, User>,
+    users: HashMap<Email, User>,
 }
 
 impl HashmapUserStore {
@@ -20,17 +22,17 @@ impl HashmapUserStore {
         }
     }
 
-    pub fn get_user(&self, email: &str) -> Result<User, UserStoreError> {
+    pub fn get_user(&self, email: &Email) -> Result<User, UserStoreError> {
         match self.users.get(email) {
             Some(user) => Ok(user.clone()),
             None => Err(UserStoreError::UserNotFound),
         }
     }
 
-    pub fn validate_user(&self, email: &str, password: &str) -> Result<(), UserStoreError> {
+    pub fn validate_user(&self, email: &Email, password: &Password) -> Result<(), UserStoreError> {
         match self.users.get(email) {
             Some(user) => {
-                if user.password == password {
+                if user.password == *password {
                     Ok(())
                 } else {
                     Err(UserStoreError::InvalidCredentials)
@@ -47,11 +49,15 @@ impl UserStore for HashmapUserStore {
         self.add_user(user)
     }
 
-    async fn get_user(&self, email: &str) -> Result<User, UserStoreError> {
+    async fn get_user(&self, email: &Email) -> Result<User, UserStoreError> {
         self.get_user(email)
     }
 
-    async fn validate_user(&self, email: &str, password: &str) -> Result<(), UserStoreError> {
+    async fn validate_user(
+        &self,
+        email: &Email,
+        password: &Password,
+    ) -> Result<(), UserStoreError> {
         self.validate_user(email, password)
     }
 }
@@ -66,7 +72,7 @@ mod tests {
 
         let user = User::new(
             "test@example.com".to_string(),
-            "password123".to_string(),
+            "Password123!".to_string(),
             true,
         );
 
@@ -79,15 +85,11 @@ mod tests {
         let mut user_store = HashmapUserStore::default();
 
         let user_email = "test@example.com".to_string();
-        let user = User::new(
-            user_email.clone(),
-            "password123".to_string(),
-            true,
-        );
+        let user = User::new(user_email.clone(), "Password123!".to_string(), true);
 
         let _ = user_store.add_user(user.clone());
 
-        let result = user_store.get_user(&user_email);
+        let result = user_store.get_user(&Email::parse(&user_email).unwrap());
         assert_eq!(result, Ok(user));
     }
 
@@ -96,14 +98,13 @@ mod tests {
         let mut user_store = HashmapUserStore::default();
 
         let user_email = "test@example.com".to_string();
-        let user_password = "password123".to_string();
-        let user = User::new(
-            user_email.clone(),
-            user_password.clone(),
-            true,
-        );
+        let user_password = "Password123!".to_string();
+        let user = User::new(user_email.clone(), user_password.clone(), true);
         let _ = user_store.add_user(user);
-        let result = user_store.validate_user(&user_email, &user_password);
+        let result = user_store.validate_user(
+            &Email::parse(&user_email).unwrap(),
+            &Password::parse(&user_password).unwrap(),
+        );
         assert_eq!(result, Ok(()));
     }
 }
