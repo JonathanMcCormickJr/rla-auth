@@ -1,32 +1,32 @@
 use crate::{
     app_state::{AppState, UserStoreType},
     domain::{email::Email, password::Password, AuthAPIError},
+    utils::auth::generate_auth_cookie,
 };
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum_extra::extract::CookieJar;
+use serde::Deserialize;
 
 pub async fn login(
     State(state): State<AppState<UserStoreType>>,
-    Json(body): Json<serde_json::Value>,
-) -> Result<impl IntoResponse, AuthAPIError> {
-    let email = body
-        .get("email")
-        .and_then(|value| value.as_str())
-        .ok_or(AuthAPIError::MalformedCredentials)?;
-    let password = body
-        .get("password")
-        .and_then(|value| value.as_str())
-        .ok_or(AuthAPIError::MalformedCredentials)?;
+    jar: CookieJar,
+    Json(request): Json<LoginRequest>,
+) -> (CookieJar, Result<impl IntoResponse, AuthAPIError>) {
+    let email = match Email::parse(&request.email) {
+        Ok(email) => email,
+        Err(_) => return (jar, Err(AuthAPIError::MalformedCredentials)),
+    };
 
-    let email = Email::parse(email).map_err(|_| AuthAPIError::MalformedCredentials)?;
-
-    // Login accepts any provided password string; authentication outcome is handled below.
-    let password = Password::parse(password).map_err(|_| AuthAPIError::AuthenticationFailed)?;
+    // Map password parse failures to authentication errors to avoid leaking details.
+    let password = match Password::parse(&request.password) {
+        Ok(password) => password,
+        Err(_) => return (jar, Err(AuthAPIError::AuthenticationFailed)),
+    };
 
     let user_store = state.user_store.read().await;
 
-    user_store
-        .validate_user(&email, &password)
-        .map_err(|error| match error {
+    if let Err(error) = user_store.validate_user(&email, &password) {
+        let auth_error = match error {
             crate::domain::data_stores::UserStoreError::UserNotFound => {
                 AuthAPIError::InvalidCredentials
             }
@@ -37,7 +37,23 @@ pub async fn login(
                 AuthAPIError::MalformedCredentials
             }
             _ => AuthAPIError::UnexpectedError,
-        })?;
+        };
 
-    Ok((StatusCode::OK, "Login successful"))
+        return (jar, Err(auth_error));
+    }
+
+    let auth_cookie = match generate_auth_cookie(&email) {
+        Ok(cookie) => cookie,
+        Err(_) => return (jar, Err(AuthAPIError::UnexpectedError)),
+    };
+
+    let updated_jar = jar.add(auth_cookie);
+
+    (updated_jar, Ok(StatusCode::OK.into_response()))
+}
+
+#[derive(Deserialize)]
+pub struct LoginRequest {
+    pub email: String,
+    pub password: String,
 }
