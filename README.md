@@ -32,3 +32,5 @@ visit http://localhost:3000
 ```
 
 visit http://localhost:8000 and http://localhost:3000
+
+Also, try for 147.182.214.35:8000 and 147.182.214.35:3000

@@ -1,5 +1,5 @@
 use axum::{
-    http::StatusCode,
+    http::{ Method, StatusCode },
     response::{IntoResponse, Response},
     routing::post,
     serve::Serve,
@@ -9,7 +9,7 @@ use domain::AuthAPIError;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use tokio::net::TcpListener;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::{ cors::CorsLayer, services::{ ServeDir, ServeFile }};
 
 pub mod app_state;
 mod domain;
@@ -37,6 +37,19 @@ impl Application {
         app_state: AppState<UserStoreType>,
         address: &str,
     ) -> Result<Self, Box<dyn Error>> {
+        // Allow the app service(running on our local machine and in production) to call the auth service
+        let allowed_origins = [
+            "http://localhost:8000".parse()?,
+            "http://147.182.214.35:8000".parse()?,
+        ];
+
+        let cors = CorsLayer::new()
+            // Allow GET and POST requests
+            .allow_methods([Method::GET, Method::POST])
+            // Allow cookies to be included in requests
+            .allow_credentials(true)
+            .allow_origin(allowed_origins);
+        
         let assets_dir =
             ServeDir::new("assets").not_found_service(ServeFile::new("assets/index.html"));
 
@@ -47,6 +60,7 @@ impl Application {
             .route("/verify-2fa", post(verify_2fa))
             .route("/verify-token", post(verify_token))
             .fallback_service(assets_dir)
+            .layer(cors)
             .with_state(app_state);
 
         let listener = tokio::net::TcpListener::bind(address).await?;
@@ -76,6 +90,8 @@ impl IntoResponse for AuthAPIError {
                 (StatusCode::UNAUTHORIZED, "Incorrect email or password")
             }
             AuthAPIError::MalformedCredentials => (StatusCode::UNPROCESSABLE_ENTITY, "Malformed credentials"),
+            AuthAPIError::MissingToken => (StatusCode::BAD_REQUEST, "Missing token"),
+            AuthAPIError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token"),
             AuthAPIError::UnexpectedError => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Unexpected error")
             }
