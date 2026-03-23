@@ -34,7 +34,7 @@ pub struct Application {
 
 impl Application {
     pub async fn build(
-        app_state: AppState<UserStoreType>,
+        app_state: AppState<UserStoreType, crate::services::hashset_banned_token_store::HashsetBannedTokenStore>,
         address: &str,
     ) -> Result<Self, Box<dyn Error>> {
         // Allow the app service(running on our local machine and in production) to call the auth service

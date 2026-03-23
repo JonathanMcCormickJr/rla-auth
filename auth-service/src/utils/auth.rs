@@ -2,8 +2,9 @@ use axum_extra::extract::cookie::{Cookie, SameSite};
 use chrono::Utc;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Validation};
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
-use crate::domain::email::Email;
+use crate::{app_state::BannedTokenStoreType, domain::email::Email};
 
 use super::constants::{JWT_COOKIE_NAME, JWT_SECRET};
     
@@ -57,13 +58,25 @@ fn generate_auth_token(email: &Email) -> Result<String, GenerateTokenError> {
 }
 
 // Check if JWT auth token is valid by decoding it using the JWT secret
-pub async fn validate_token(token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
-    decode::<Claims>(
+pub async fn validate_token(
+    token: &str,
+    banned: &RwLock<BannedTokenStoreType>,
+) -> Result<Claims, jsonwebtoken::errors::Error> {
+    let claims = decode::<Claims>(
         token,
         &DecodingKey::from_secret(JWT_SECRET.as_bytes()),
         &Validation::default(),
-    )
-    .map(|data| data.claims)
+    )?
+    .claims;
+
+    let banned_guard = banned.read().await;
+    if banned_guard.is_token_banned(token).unwrap_or(false) {
+        Err(jsonwebtoken::errors::Error::from(
+            jsonwebtoken::errors::ErrorKind::InvalidToken,
+        ))
+    } else {
+        Ok(claims)
+    }
 }
 
 // Create JWT auth token by encoding claims using the JWT secret
@@ -118,7 +131,8 @@ mod tests {
     async fn test_validate_token_with_valid_token() {
         let email = Email::parse("test@example.com").unwrap();
         let token = generate_auth_token(&email).unwrap();
-        let result = validate_token(&token).await.unwrap();
+        let banned = RwLock::new(BannedTokenStoreType::default());
+        let result = validate_token(&token, &banned).await.unwrap();
         assert_eq!(result.sub, "test@example.com");
 
         let exp = Utc::now()
@@ -132,7 +146,8 @@ mod tests {
     #[tokio::test]
     async fn test_validate_token_with_invalid_token() {
         let token = "invalid_token".to_owned();
-        let result = validate_token(&token).await;
+        let banned = RwLock::new(BannedTokenStoreType::default());
+        let result = validate_token(&token, &banned).await;
         assert!(result.is_err());
     }
 }

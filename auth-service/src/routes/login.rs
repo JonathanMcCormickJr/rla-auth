@@ -1,5 +1,5 @@
 use crate::{
-    app_state::{AppState, UserStoreType},
+    app_state::{AppState, BannedTokenStoreType, UserStoreType},
     domain::{email::Email, password::Password, AuthAPIError},
     utils::auth::generate_auth_cookie,
 };
@@ -8,7 +8,7 @@ use axum_extra::extract::CookieJar;
 use serde::Deserialize;
 
 pub async fn login(
-    State(state): State<AppState<UserStoreType>>,
+    State(state): State<AppState<UserStoreType, BannedTokenStoreType>>,
     jar: CookieJar,
     Json(request): Json<LoginRequest>,
 ) -> (CookieJar, Result<impl IntoResponse, AuthAPIError>) {

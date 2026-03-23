@@ -1,4 +1,5 @@
 use auth_service::Application;
+use auth_service::app_state::{AppState, BannedTokenStoreType, UserStoreType};
 use reqwest::{ Client, cookie::Jar };
 use serde_json::json;
 use std::sync::Arc;
@@ -8,17 +9,20 @@ pub struct TestApp {
     pub address: String,
     pub cookie_jar: Arc<Jar>,
     pub http_client: reqwest::Client,
+    pub app_state: AppState<UserStoreType, BannedTokenStoreType>,
 }
 
 impl TestApp {
     pub async fn new() -> Self {
         let user_store = auth_service::services::hashmap_user_store::HashmapUserStore::default();
+        let banned_token_store = auth_service::services::hashset_banned_token_store::HashsetBannedTokenStore::default();
         let app_state = auth_service::app_state::AppState::new(std::sync::Arc::new(
             tokio::sync::RwLock::new(user_store),
         )
-            as auth_service::app_state::UserStoreType);
+            as auth_service::app_state::UserStoreType, banned_token_store);
 
-        let app = Application::build(app_state, "0.0.0.0:0")
+
+        let app = Application::build(app_state.clone(), "0.0.0.0:0")
             .await
             .expect("Failed to build app");
 
@@ -41,6 +45,7 @@ impl TestApp {
             address,
             cookie_jar,
             http_client,
+            app_state,
         }
     }
 

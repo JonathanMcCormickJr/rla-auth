@@ -1,4 +1,5 @@
 use auth_service::utils::constants::JWT_COOKIE_NAME;
+use reqwest::cookie::CookieStore;
 use serde_json::json;
 use reqwest::Url;
 
@@ -54,9 +55,32 @@ async fn should_return_200_if_valid_jwt_cookie() {
     let login_response = app.post_login(&login_body).await;
     assert_eq!(login_response.status().as_u16(), 200);
 
+    let app_url = Url::parse(&app.address).expect("Failed to parse app URL");
+    let cookie_header = app
+        .cookie_jar
+        .cookies(&app_url)
+        .expect("Expected auth cookie to be present after login")
+        .to_str()
+        .expect("Cookie header should be valid UTF-8")
+        .to_string();
+
+    let jwt_token = cookie_header
+        .split(';')
+        .map(str::trim)
+        .find_map(|cookie| cookie.strip_prefix(&format!("{}=", JWT_COOKIE_NAME)))
+        .expect("Expected JWT cookie in jar")
+        .to_string();
+
     // Finally, we can call the log-out route and assert that a 200 status code is returned.
     let logout_response = app.post_logout().await;
     assert_eq!(logout_response.status().as_u16(), 200);
+
+    let banned_tokens = app.app_state.banned_token_store.read().await;
+    assert!(
+        banned_tokens
+            .is_token_banned(jwt_token.as_str())
+            .expect("Failed to inspect banned token store")
+    );
 }
 
 #[tokio::test]
