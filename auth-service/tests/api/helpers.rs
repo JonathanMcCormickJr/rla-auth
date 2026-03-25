@@ -20,7 +20,7 @@ impl TestApp {
         let app_state = auth_service::app_state::AppState::new(std::sync::Arc::new(
             tokio::sync::RwLock::new(user_store),
         )
-            as auth_service::app_state::UserStoreType, banned_token_store, two_fa_code_store);
+            as auth_service::app_state::UserStoreType, banned_token_store, two_fa_code_store, std::sync::Arc::new(auth_service::services::mock_email_client::MockEmailClient) as auth_service::app_state::EmailClientType);
 
 
         let app = Application::build(app_state.clone(), "0.0.0.0:0")
