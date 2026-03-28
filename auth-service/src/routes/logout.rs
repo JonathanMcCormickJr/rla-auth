@@ -1,5 +1,5 @@
-use axum::{http::StatusCode, response::IntoResponse};
 use axum::extract::State;
+use axum::{http::StatusCode, response::IntoResponse};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
 
@@ -23,7 +23,10 @@ pub async fn logout(
 
     let token = cookie.value().to_owned();
 
-    if validate_token(&token, &state.banned_token_store).await.is_err() {
+    if validate_token(&token, &state.banned_token_store)
+        .await
+        .is_err()
+    {
         return (jar, Err(AuthAPIError::InvalidToken));
     }
 

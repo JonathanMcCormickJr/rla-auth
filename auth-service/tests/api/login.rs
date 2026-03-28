@@ -20,7 +20,7 @@ async fn should_return_422_if_malformed_credentials() {
 #[tokio::test]
 async fn should_return_400_if_invalid_input() {
     // Call the log-in route with invalid credentials and assert that a
-    // 400 HTTP status code is returned along with the appropriate error message. 
+    // 400 HTTP status code is returned along with the appropriate error message.
     let app = TestApp::new().await;
     let body = json!({
         "email": get_random_email(),
@@ -30,11 +30,10 @@ async fn should_return_400_if_invalid_input() {
     assert_eq!(response.status().as_u16(), 400);
 }
 
-
 #[tokio::test]
 async fn should_return_401_if_incorrect_credentials() {
     // Call the log-in route with incorrect credentials and assert
-    // that a 401 HTTP status code is returned along with the appropriate error message.     
+    // that a 401 HTTP status code is returned along with the appropriate error message.
     let app = TestApp::new().await;
 
     // First, we need to create a user with known credentials. We can do this by calling the sign-up route.
@@ -152,8 +151,8 @@ async fn should_return_206_if_valid_credentials_and_2fa_enabled() {
         .expect("loginAttemptId should be a string")
         .to_owned();
 
-    let second_attempt = Uuid::parse_str(&second_attempt)
-        .expect("second loginAttemptId should be a valid UUID");
+    let second_attempt =
+        Uuid::parse_str(&second_attempt).expect("second loginAttemptId should be a valid UUID");
 
     assert_eq!(second_attempt.get_version_num(), 4);
 
@@ -162,15 +161,14 @@ async fn should_return_206_if_valid_credentials_and_2fa_enabled() {
         "expected loginAttemptId to be unique across attempts: first={first_attempt}, second={second_attempt}"
     );
 
-    assert_eq!(
-        body.message,
-        "2FA required".to_string()
-    );
+    assert_eq!(body.message, "2FA required".to_string());
 
     let json_body = body;
 
     assert_eq!(json_body.message, "2FA required".to_owned());
 
-    json_body.login_attempt_id.parse::<Uuid>().expect("loginAttemptId should be a valid UUID");
-
+    json_body
+        .login_attempt_id
+        .parse::<Uuid>()
+        .expect("loginAttemptId should be a valid UUID");
 }

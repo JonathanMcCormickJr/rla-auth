@@ -1,11 +1,17 @@
 use crate::{
-    app_state::{AppState, BannedTokenStoreType, UserStoreType}, domain::{
-        AuthAPIError, data_stores::{LoginAttemptId, TwoFACode, UserStoreError}, email::Email, password::Password
-    }, services::TwoFACodeStore, utils::auth::generate_auth_cookie
+    app_state::{AppState, BannedTokenStoreType, UserStoreType},
+    domain::{
+        data_stores::{LoginAttemptId, TwoFACode, UserStoreError},
+        email::Email,
+        password::Password,
+        AuthAPIError,
+    },
+    services::TwoFACodeStore,
+    utils::auth::generate_auth_cookie,
 };
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use axum_extra::extract::CookieJar;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 
 pub async fn login(
     State(state): State<AppState<UserStoreType, BannedTokenStoreType>>,
@@ -70,7 +76,11 @@ async fn handle_2fa(
         return (jar, Err(AuthAPIError::UnexpectedError));
     }
 
-    if let Err(_) = state.email_client.send_email(email, "Your 2FA Code", &two_fa_code.as_ref()).await {
+    if let Err(_) = state
+        .email_client
+        .send_email(email, "Your 2FA Code", &two_fa_code.as_ref())
+        .await
+    {
         return (jar, Err(AuthAPIError::UnexpectedError));
     }
 
@@ -95,7 +105,10 @@ async fn handle_no_2fa(
     };
 
     let updated_jar = jar.add(auth_cookie);
-    (updated_jar, Ok((StatusCode::OK, Json(LoginResponse::RegularAuth))))
+    (
+        updated_jar,
+        Ok((StatusCode::OK, Json(LoginResponse::RegularAuth))),
+    )
 }
 
 #[derive(Deserialize)]

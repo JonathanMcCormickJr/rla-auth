@@ -1,4 +1,8 @@
 use crate::helpers::TestApp;
+use auth_service::{
+    domain::{data_stores::TwoFACodeStore, Email},
+    routes::TwoFactorAuthResponse,
+};
 use auth_service::utils::constants::JWT_COOKIE_NAME;
 use serde_json::json;
 
@@ -116,4 +120,62 @@ async fn should_return_401_if_banned_token() {
     let verify_response = app.post_verify_token(&verify_body).await;
 
     assert_eq!(verify_response.status().as_u16(), 401);
+}
+
+#[tokio::test]
+async fn should_return_200_if_correct_code() {
+    // Make sure to assert the auth cookie gets set
+    let app = TestApp::new().await;
+
+    let email = crate::helpers::get_random_email();
+    let password = "Password123!";
+
+    let signup_body = json!({
+        "email": email,
+        "password": password,
+        "requires2FA": true,
+    });
+
+    let signup_response = app.post_signup_with_body(&signup_body).await;
+    assert_eq!(signup_response.status().as_u16(), 201);
+
+    let login_body = json!({
+        "email": signup_body["email"],
+        "password": password,
+    });
+
+    let login_response = app.post_login(&login_body).await;
+    assert_eq!(login_response.status().as_u16(), 206);
+
+    let challenge: TwoFactorAuthResponse = login_response
+        .json()
+        .await
+        .expect("2FA challenge body should be returned");
+
+    let parsed_email = Email::parse(&email).expect("signup email should be valid");
+    let (_, code) = app
+        .app_state
+        .two_fa_code_store
+        .read()
+        .await
+        .get_code(&parsed_email)
+        .await
+        .expect("2FA code should exist after login challenge");
+
+    let verify_body = json!({
+        "email": parsed_email.as_ref(),
+        "login_attempt_id": challenge.login_attempt_id,
+        "code": code.as_ref(),
+    });
+
+    let verify_response = app.post_verify_2fa(&verify_body).await;
+
+    assert_eq!(verify_response.status().as_u16(), 200);
+
+    let auth_cookie = verify_response
+        .cookies()
+        .find(|cookie| cookie.name() == JWT_COOKIE_NAME)
+        .expect("No auth cookie found after successful 2FA verification");
+
+    assert!(!auth_cookie.value().is_empty());
 }

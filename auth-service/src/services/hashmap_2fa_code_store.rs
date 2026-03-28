@@ -31,7 +31,10 @@ impl TwoFACodeStore for HashmapTwoFACodeStore {
         &self,
         email: &Email,
     ) -> Result<(LoginAttemptId, TwoFACode), TwoFACodeStoreError> {
-        self.codes.get(email).cloned().ok_or(TwoFACodeStoreError::LoginAttemptIdNotFound)
+        self.codes
+            .get(email)
+            .cloned()
+            .ok_or(TwoFACodeStoreError::LoginAttemptIdNotFound)
     }
 }
 
@@ -48,10 +51,12 @@ mod tests {
         let login_attempt_id = LoginAttemptId::default();
         let code = TwoFACode::default();
 
-        store.add_code(email.clone(), login_attempt_id.clone(), code.clone()).await.unwrap();
+        store
+            .add_code(email.clone(), login_attempt_id.clone(), code.clone())
+            .await
+            .unwrap();
 
         let retrieved_code = store.get_code(&email).await.unwrap();
         assert_eq!(retrieved_code, (login_attempt_id, code));
     }
-
 }

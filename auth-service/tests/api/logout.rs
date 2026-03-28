@@ -1,7 +1,7 @@
 use auth_service::utils::constants::JWT_COOKIE_NAME;
 use reqwest::cookie::CookieStore;
-use serde_json::json;
 use reqwest::Url;
+use serde_json::json;
 
 use crate::helpers::{get_random_email, TestApp};
 
@@ -76,11 +76,9 @@ async fn should_return_200_if_valid_jwt_cookie() {
     assert_eq!(logout_response.status().as_u16(), 200);
 
     let banned_tokens = app.app_state.banned_token_store.read().await;
-    assert!(
-        banned_tokens
-            .is_token_banned(jwt_token.as_str())
-            .expect("Failed to inspect banned token store")
-    );
+    assert!(banned_tokens
+        .is_token_banned(jwt_token.as_str())
+        .expect("Failed to inspect banned token store"));
 }
 
 #[tokio::test]

@@ -59,16 +59,16 @@ pub struct LoginAttemptId(String);
 impl LoginAttemptId {
     pub fn parse(id: String) -> Result<Self, String> {
         // Use the `parse_str` function from the `uuid` crate to ensure `id` is a valid UUID
-            Uuid::parse_str(&id)
-                .map(|_| Self(id))
-                .map_err(|error| error.to_string())
+        Uuid::parse_str(&id)
+            .map(|_| Self(id))
+            .map_err(|error| error.to_string())
     }
 }
 
 impl Default for LoginAttemptId {
     fn default() -> Self {
         // Use the `uuid` crate to generate a random version 4 UUID
-            Self(Uuid::new_v4().to_string())
+        Self(Uuid::new_v4().to_string())
     }
 }
 
@@ -97,7 +97,8 @@ impl Default for TwoFACode {
         // Use the `rand` crate to generate a random 2FA code.
         // The code should be 6 digits (ex: 834629)
         let random_bytes: [u8; 3] = rand::random();
-        let random_number = u32::from_be_bytes([0, random_bytes[0], random_bytes[1], random_bytes[2]]) % 1_000_000;
+        let random_number =
+            u32::from_be_bytes([0, random_bytes[0], random_bytes[1], random_bytes[2]]) % 1_000_000;
         Self(format!("{:06}", random_number))
     }
 }

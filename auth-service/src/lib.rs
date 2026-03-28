@@ -1,5 +1,5 @@
 use axum::{
-    http::{ Method, StatusCode },
+    http::{Method, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
     serve::Serve,
@@ -9,10 +9,13 @@ use domain::AuthAPIError;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use tokio::net::TcpListener;
-use tower_http::{ cors::CorsLayer, services::{ ServeDir, ServeFile }};
+use tower_http::{
+    cors::CorsLayer,
+    services::{ServeDir, ServeFile},
+};
 
 pub mod app_state;
-mod domain;
+pub mod domain;
 pub mod routes;
 pub mod services;
 pub mod utils;
@@ -34,7 +37,10 @@ pub struct Application {
 
 impl Application {
     pub async fn build(
-        app_state: AppState<UserStoreType, crate::services::hashset_banned_token_store::HashsetBannedTokenStore>,
+        app_state: AppState<
+            UserStoreType,
+            crate::services::hashset_banned_token_store::HashsetBannedTokenStore,
+        >,
         address: &str,
     ) -> Result<Self, Box<dyn Error>> {
         // Allow the app service(running on our local machine and in production) to call the auth service
@@ -49,7 +55,7 @@ impl Application {
             // Allow cookies to be included in requests
             .allow_credentials(true)
             .allow_origin(allowed_origins);
-        
+
         let assets_dir =
             ServeDir::new("assets").not_found_service(ServeFile::new("assets/index.html"));
 
@@ -89,7 +95,9 @@ impl IntoResponse for AuthAPIError {
             AuthAPIError::AuthenticationFailed => {
                 (StatusCode::UNAUTHORIZED, "Incorrect email or password")
             }
-            AuthAPIError::MalformedCredentials => (StatusCode::UNPROCESSABLE_ENTITY, "Malformed credentials"),
+            AuthAPIError::MalformedCredentials => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "Malformed credentials")
+            }
             AuthAPIError::MissingToken => (StatusCode::BAD_REQUEST, "Missing token"),
             AuthAPIError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token"),
             AuthAPIError::UnexpectedError => {

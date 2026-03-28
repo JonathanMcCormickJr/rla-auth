@@ -7,7 +7,7 @@ pub mod user;
 
 pub use data_stores::UserStoreError;
 pub use email::Email;
-pub use password::Password;
 pub use email_client::*;
 pub use error::AuthAPIError;
+pub use password::Password;
 pub use user::User;
