@@ -14,17 +14,17 @@ pub struct TestApp {
 
 impl TestApp {
     pub async fn new() -> Self {
-        let user_store = auth_service::services::hashmap_user_store::HashmapUserStore::default();
+        let user_store = auth_service::services::data_stores::hashmap_user_store::HashmapUserStore::default();
         let banned_token_store =
-            auth_service::services::hashset_banned_token_store::HashsetBannedTokenStore::default();
+            auth_service::services::data_stores::hashset_banned_token_store::HashsetBannedTokenStore::default();
         let two_fa_code_store =
-            auth_service::services::hashmap_2fa_code_store::HashmapTwoFACodeStore::default();
+            auth_service::services::data_stores::hashmap_2fa_code_store::HashmapTwoFACodeStore::default();
         let app_state = auth_service::app_state::AppState::new(
             std::sync::Arc::new(tokio::sync::RwLock::new(user_store))
                 as auth_service::app_state::UserStoreType,
             banned_token_store,
             two_fa_code_store,
-            std::sync::Arc::new(auth_service::services::mock_email_client::MockEmailClient)
+            std::sync::Arc::new(auth_service::services::data_stores::mock_email_client::MockEmailClient)
                 as auth_service::app_state::EmailClientType,
         );
 

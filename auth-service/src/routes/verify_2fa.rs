@@ -107,7 +107,7 @@ mod tests {
     use crate::{
         app_state::{EmailClientType, UserStoreType},
         domain::data_stores::TwoFACodeStoreError,
-        services::{
+        services::data_stores::{
             hashmap_2fa_code_store::HashmapTwoFACodeStore, hashmap_user_store::HashmapUserStore,
             hashset_banned_token_store::HashsetBannedTokenStore,
             mock_email_client::MockEmailClient,

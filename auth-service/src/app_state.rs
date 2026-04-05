@@ -2,14 +2,14 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::{
-    domain::data_stores::BannedTokenStore, services::hashmap_user_store::HashmapUserStore,
+    domain::data_stores::BannedTokenStore, services::data_stores::hashmap_user_store::HashmapUserStore,
 };
 
 // Using a type alias to improve readability!
 pub type UserStoreType = Arc<RwLock<HashmapUserStore>>;
 pub type BannedTokenStoreType =
-    crate::services::hashset_banned_token_store::HashsetBannedTokenStore;
-pub type TwoFACodeStoreType = crate::services::hashmap_2fa_code_store::HashmapTwoFACodeStore;
+    crate::services::data_stores::hashset_banned_token_store::HashsetBannedTokenStore;
+pub type TwoFACodeStoreType = crate::services::data_stores::hashmap_2fa_code_store::HashmapTwoFACodeStore;
 pub type TwoFACodeStoreHandle = Arc<RwLock<TwoFACodeStoreType>>;
 pub type EmailClientType = Arc<dyn crate::domain::EmailClient + Send + Sync>; // New!
 

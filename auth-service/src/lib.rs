@@ -7,6 +7,7 @@ use axum::{
 };
 use domain::AuthAPIError;
 use serde::{Deserialize, Serialize};
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::error::Error;
 use tokio::net::TcpListener;
 use tower_http::{
@@ -39,7 +40,7 @@ impl Application {
     pub async fn build(
         app_state: AppState<
             UserStoreType,
-            crate::services::hashset_banned_token_store::HashsetBannedTokenStore,
+            crate::services::data_stores::hashset_banned_token_store::HashsetBannedTokenStore,
         >,
         address: &str,
     ) -> Result<Self, Box<dyn Error>> {
@@ -109,4 +110,9 @@ impl IntoResponse for AuthAPIError {
         });
         (status, body).into_response()
     }
+}
+
+pub async fn get_postgres_pool(url: &str) -> Result<PgPool, sqlx::Error> {
+    // Create a new PostgreSQL connection pool
+    PgPoolOptions::new().max_connections(5).connect(url).await
 }
