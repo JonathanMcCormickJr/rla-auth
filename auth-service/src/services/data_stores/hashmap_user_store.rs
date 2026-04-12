@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 
-use crate::domain::{
-    data_stores::UserStore, email::Email, password::Password, User, UserStoreError,
-};
+use crate::domain::{data_stores::UserStore, email::Email, User, UserStoreError};
 
 #[derive(Default)]
 pub struct HashmapUserStore {
@@ -29,10 +27,10 @@ impl HashmapUserStore {
         }
     }
 
-    pub fn validate_user(&self, email: &Email, password: &Password) -> Result<(), UserStoreError> {
+    pub async fn validate_user(&self, email: &Email, password: &str) -> Result<(), UserStoreError> {
         match self.users.get(email) {
             Some(user) => {
-                if user.password == *password {
+                if user.password.verify_raw_password(password).await.is_ok() {
                     Ok(())
                 } else {
                     Err(UserStoreError::InvalidCredentials)
@@ -56,9 +54,14 @@ impl UserStore for HashmapUserStore {
     async fn validate_user(
         &self,
         email: &Email,
-        password: &Password,
+        raw_password: &str, // updated!
     ) -> Result<(), UserStoreError> {
-        self.validate_user(email, password)
+        let user: &User = self.users.get(email).ok_or(UserStoreError::UserNotFound)?;
+
+        user.password // updated password verification
+            .verify_raw_password(raw_password)
+            .await
+            .map_err(|_| UserStoreError::InvalidCredentials)
     }
 }
 
@@ -74,7 +77,9 @@ mod tests {
             "test@example.com".to_string(),
             "Password123!".to_string(),
             true,
-        );
+        )
+        .await
+        .unwrap();
 
         let result = user_store.add_user(user);
         assert_eq!(result, Ok(()));
@@ -85,7 +90,9 @@ mod tests {
         let mut user_store = HashmapUserStore::default();
 
         let user_email = "test@example.com".to_string();
-        let user = User::new(user_email.clone(), "Password123!".to_string(), true);
+        let user = User::new(user_email.clone(), "Password123!".to_string(), true)
+            .await
+            .unwrap();
 
         let _ = user_store.add_user(user.clone());
 
@@ -99,12 +106,13 @@ mod tests {
 
         let user_email = "test@example.com".to_string();
         let user_password = "Password123!".to_string();
-        let user = User::new(user_email.clone(), user_password.clone(), true);
+        let user = User::new(user_email.clone(), user_password.clone(), true)
+            .await
+            .unwrap();
         let _ = user_store.add_user(user);
-        let result = user_store.validate_user(
-            &Email::parse(&user_email).unwrap(),
-            &Password::parse(&user_password).unwrap(),
-        );
+        let result = user_store
+            .validate_user(&Email::parse(&user_email).unwrap(), &user_password)
+            .await;
         assert_eq!(result, Ok(()));
     }
 }

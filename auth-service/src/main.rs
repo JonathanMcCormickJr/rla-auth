@@ -1,9 +1,10 @@
 use auth_service::{
     Application, app_state::{AppState, EmailClientType, UserStoreType}, get_postgres_pool, services::data_stores::{
-        hashmap_2fa_code_store::HashmapTwoFACodeStore, hashmap_user_store::HashmapUserStore,
+        hashmap_2fa_code_store::HashmapTwoFACodeStore,
         hashset_banned_token_store::HashsetBannedTokenStore, mock_email_client::MockEmailClient,
+        postgres_user_store::PostgresUserStore,
     }, utils::constants::{
-        DATABASE_URL, JWT_SECRET, env::{DATABASE_URL_ENV_VAR, JWT_SECRET_ENV_VAR}, prod
+        DATABASE_URL, prod
     }
 };
 use sqlx::PgPool;
@@ -12,13 +13,12 @@ use tokio::sync::RwLock;
 
 #[tokio::main]
 async fn main() {
-    // We will use this PostgreSQL pool in the next task! 
     let pg_pool = configure_postgresql().await;
 
-    let user_store = HashmapUserStore::default();
+    let user_store = PostgresUserStore::new(pg_pool);
     let banned_token_store = HashsetBannedTokenStore::default();
     let two_fa_code_store = HashmapTwoFACodeStore::default();
-    let email_client = Arc::new(MockEmailClient) as EmailClientType; // TODO: Replace with real email client in production!
+    let email_client = Arc::new(MockEmailClient) as EmailClientType;
     let app_state = AppState::new(
         Arc::new(RwLock::new(user_store)) as UserStoreType,
         banned_token_store,

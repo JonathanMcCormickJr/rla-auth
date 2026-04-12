@@ -1,6 +1,6 @@
 use crate::{
     app_state::{AppState, BannedTokenStoreType, UserStoreType},
-    domain::{email::Email, password::Password, AuthAPIError, User},
+    domain::{data_stores::UserStore, email::Email, password::HashedPassword, AuthAPIError, User},
 };
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
@@ -13,20 +13,20 @@ pub async fn signup(
     let user = User {
         uuid: uuid::Uuid::new_v4(),
         email: Email::parse(&request.email).map_err(|_| AuthAPIError::InvalidCredentials)?,
-        password: Password::parse(&request.password)
+        password: HashedPassword::parse(request.password.clone())
+            .await
             .map_err(|_| AuthAPIError::InvalidCredentials)?,
         requires_2fa: request.requires_2fa,
     };
 
     let mut user_store = state.user_store.write().await;
 
-    // Return AuthAPIError::UserAlreadyExists if email exists in user_store.
-    if user_store.get_user(&user.email).is_ok() {
+    if UserStore::get_user(&*user_store, &user.email).await.is_ok() {
         return Err(AuthAPIError::UserAlreadyExists);
     }
 
-    user_store
-        .add_user(user)
+    UserStore::add_user(&mut *user_store, user)
+        .await
         .map_err(|_| AuthAPIError::UnexpectedError)?;
 
     let response = Json(SignupResponse {

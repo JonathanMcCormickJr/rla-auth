@@ -2,11 +2,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::{
-    domain::data_stores::BannedTokenStore, services::data_stores::hashmap_user_store::HashmapUserStore,
+    domain::data_stores::BannedTokenStore, services::data_stores::postgres_user_store::PostgresUserStore,
 };
 
-// Using a type alias to improve readability!
-pub type UserStoreType = Arc<RwLock<HashmapUserStore>>;
+pub type UserStoreType = Arc<RwLock<PostgresUserStore>>;
 pub type BannedTokenStoreType =
     crate::services::data_stores::hashset_banned_token_store::HashsetBannedTokenStore;
 pub type TwoFACodeStoreType = crate::services::data_stores::hashmap_2fa_code_store::HashmapTwoFACodeStore;

@@ -1,85 +1,119 @@
-// Passwords must be at least 8 characters long,
-// contain at least one uppercase letter, one lowercase letter, one digit, and one special character.
+use argon2::{
+    password_hash::{rand_core::OsRng, SaltString},
+    Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version,
+};
 
-use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HashedPassword(String);
 
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct Password(String);
-
-impl Password {
-    pub fn parse(password: &str) -> Result<Self, &'static str> {
-        let has_min_length = password.chars().count() >= 8;
-        let has_uppercase = password.chars().any(|c| c.is_ascii_uppercase());
-        let has_lowercase = password.chars().any(|c| c.is_ascii_lowercase());
-        let has_digit = password.chars().any(|c| c.is_ascii_digit());
-        let has_special = password.chars().any(|c| !c.is_ascii_alphanumeric());
-
-        if has_min_length && has_uppercase && has_lowercase && has_digit && has_special {
-            Ok(Password(password.to_string()))
-        } else {
-            Err("Password must be at least 8 characters long, contain at least one uppercase letter, one lowercase letter, one digit, and one special character")
+impl HashedPassword {
+    pub async fn parse(password: String) -> Result<Self, String> {
+        if password.chars().count() < 8 {
+            return Err("Password must be at least 8 characters long".to_string());
         }
+        let hash = compute_password_hash(password).await?;
+        Ok(HashedPassword(hash))
+    }
+
+    pub fn parse_password_hash(hash: String) -> Result<HashedPassword, String> {
+        PasswordHash::new(&hash).map_err(|e| e.to_string())?;
+        Ok(HashedPassword(hash))
+    }
+
+    pub async fn verify_raw_password(&self, password_candidate: &str) -> Result<(), String> {
+        let password_hash = self.0.clone();
+        let candidate = password_candidate.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let expected = PasswordHash::new(&password_hash).map_err(|e| e.to_string())?;
+            Argon2::default()
+                .verify_password(candidate.as_bytes(), &expected)
+                .map_err(|e| e.to_string())
+        })
+        .await
+        .map_err(|e| e.to_string())?
     }
 }
 
-impl AsRef<str> for Password {
+impl AsRef<str> for HashedPassword {
     fn as_ref(&self) -> &str {
         &self.0
     }
 }
 
+async fn compute_password_hash(password: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let salt = SaltString::generate(&mut OsRng);
+        let params = Params::new(15000, 2, 1, None).map_err(|e| e.to_string())?;
+        Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+            .hash_password(password.as_bytes(), &salt)
+            .map(|h| h.to_string())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::domain::password::Password;
+    use super::HashedPassword;
+    use argon2::{
+        password_hash::{rand_core::OsRng, SaltString},
+        Algorithm, Argon2, Params, PasswordHasher, Version,
+    };
 
-    #[test]
-    fn parse_valid_password() {
-        let valid_passwords = vec![
-            ")Password123",
-            "P@ssw0rd!",
-            "123cC45W@678",
-            "Abcdef#gh1",
-            "A1b2C3d4E5f6G7h8I9j0K!@#$%^&*()_+-=[]{}|;:,.<>?/~`",
-            "%f3gegnS8",
-            "98jsvhju9adufhvdf89vjsj9v98H*Fh8vh8sv8(HSSV(J)DVISD)jsdivjP)S(VHhuSD)HV*g}Sv{VS)DijsDV]sjdv]sjvijdvs[vi{SDvh[s(DUHVs9huvdn{SHDiosNdv[)DNV{)DSVNH0Sdvhn[0VND{SNDV{S)duvs(PVHUWY*GYEF*YOGuf~!~(````92uehhr\"fviefee0"
-        ];
-        for valid_password in valid_passwords {
-            let password = Password::parse(valid_password);
-            assert!(
-                password.is_ok(),
-                "Expected '{valid_password}' to be valid, but parsing failed"
-            );
-        }
+    #[tokio::test]
+    async fn empty_string_is_rejected() {
+        assert!(HashedPassword::parse("".to_owned()).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn string_less_than_8_characters_is_rejected() {
+        assert!(HashedPassword::parse("1234567".to_owned()).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn valid_password_is_hashed() {
+        let hp = HashedPassword::parse("ValidPass123".to_owned())
+            .await
+            .unwrap();
+        assert!(hp.as_ref().starts_with("$argon2id$v=19$"));
     }
 
     #[test]
-    fn parse_invalid_password() {
-        let invalid_passwords = vec![
-            "short",
-            "nouppercase1!",
-            "NOLOWERCASE1!",
-            "NoSpecialChar1",
-            "NoDigit!@#",
-            "     ",
-            "password",
-            "PASSWORD123",
-            "Passw0rd", // missing special character
-        ];
-        for invalid_password in invalid_passwords {
-            let password = Password::parse(invalid_password);
-            assert!(
-                password.is_err(),
-                "Expected '{invalid_password}' to be invalid, but parsing succeeded"
-            );
-        }
+    fn can_parse_valid_argon2_hash() {
+        let raw_password = "TestPassword123";
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::new(
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::new(15000, 2, 1, None).unwrap(),
+        );
+
+        let hash_string = argon2
+            .hash_password(raw_password.as_bytes(), &salt)
+            .unwrap()
+            .to_string();
+
+        let hash_password = HashedPassword::parse_password_hash(hash_string.clone()).unwrap();
+
+        assert_eq!(hash_password.as_ref(), hash_string.as_str());
+        assert!(hash_password.as_ref().starts_with("$argon2id$v=19$"));
     }
 
-    #[test]
-    fn use_password_as_ref() {
-        let password_str = "P@ssw0rd!";
-        let password = Password::parse(password_str).unwrap();
-        assert_eq!(password.as_ref(), password_str);
-        assert_eq!(password.0, password_str);
-        assert_eq!(&password.0, password_str);
+    #[tokio::test]
+    async fn parse_password_hash_rejects_malformed_string() {
+        assert!(HashedPassword::parse_password_hash("not-a-hash".to_owned()).is_err());
+    }
+
+    #[tokio::test]
+    async fn can_verify_raw_password() {
+        let raw_password = "TestPassword123";
+        let hash_password = HashedPassword::parse(raw_password.to_owned()).await.unwrap();
+
+        assert!(hash_password.verify_raw_password(raw_password).await.is_ok());
+        assert!(hash_password
+            .verify_raw_password("wrong_password")
+            .await
+            .is_err());
     }
 }

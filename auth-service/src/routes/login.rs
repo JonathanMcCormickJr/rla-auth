@@ -1,9 +1,8 @@
 use crate::{
     app_state::{AppState, BannedTokenStoreType, UserStoreType},
     domain::{
-        data_stores::{LoginAttemptId, TwoFACode, UserStoreError},
+        data_stores::{LoginAttemptId, TwoFACode, UserStore, UserStoreError},
         email::Email,
-        password::Password,
         AuthAPIError,
     },
     services::TwoFACodeStore,
@@ -23,15 +22,9 @@ pub async fn login(
         Err(_) => return (jar, Err(AuthAPIError::MalformedCredentials)),
     };
 
-    // Map password parse failures to authentication errors to avoid leaking details.
-    let password = match Password::parse(&request.password) {
-        Ok(password) => password,
-        Err(_) => return (jar, Err(AuthAPIError::AuthenticationFailed)),
-    };
-
     let user_store = state.user_store.read().await;
 
-    let user = match user_store.get_user(&email) {
+    let user = match UserStore::get_user(&*user_store, &email).await {
         Ok(user) => user,
         Err(error) => {
             let auth_error = match error {
@@ -46,7 +39,12 @@ pub async fn login(
         }
     };
 
-    if user.password != password {
+    if user
+        .password
+        .verify_raw_password(&request.password)
+        .await
+        .is_err()
+    {
         return (jar, Err(AuthAPIError::AuthenticationFailed));
     }
 

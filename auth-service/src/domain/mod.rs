@@ -9,5 +9,5 @@ pub use data_stores::UserStoreError;
 pub use email::Email;
 pub use email_client::*;
 pub use error::AuthAPIError;
-pub use password::Password;
+pub use password::HashedPassword;
 pub use user::User;

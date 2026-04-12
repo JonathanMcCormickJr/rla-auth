@@ -1,8 +1,8 @@
 use crate::{
     app_state::{AppState, BannedTokenStoreType, UserStoreType},
     domain::{
-        data_stores::LoginAttemptId, data_stores::TwoFACode, data_stores::UserStoreError,
-        email::Email, AuthAPIError,
+        data_stores::LoginAttemptId, data_stores::TwoFACode, data_stores::UserStore,
+        data_stores::UserStoreError, email::Email, AuthAPIError,
     },
     services::TwoFACodeStore,
     utils::auth::generate_auth_cookie,
@@ -38,7 +38,7 @@ pub async fn verify_2fa(
             Err(_) => {
                 // If the user exists but no active challenge is found, treat it as replay/expired credentials.
                 let user_store = state.user_store.read().await;
-                return match user_store.get_user(&email) {
+                return match UserStore::get_user(&*user_store, &email).await {
                     Ok(_) => {
                         let response = (
                             StatusCode::UNAUTHORIZED,
@@ -107,20 +107,26 @@ mod tests {
     use crate::{
         app_state::{EmailClientType, UserStoreType},
         domain::data_stores::TwoFACodeStoreError,
+        get_postgres_pool,
         services::data_stores::{
-            hashmap_2fa_code_store::HashmapTwoFACodeStore, hashmap_user_store::HashmapUserStore,
+            hashmap_2fa_code_store::HashmapTwoFACodeStore,
             hashset_banned_token_store::HashsetBannedTokenStore,
             mock_email_client::MockEmailClient,
+            postgres_user_store::PostgresUserStore,
         },
-        utils::constants::JWT_COOKIE_NAME,
+        utils::constants::{DATABASE_URL, JWT_COOKIE_NAME},
     };
     use axum::Json;
     use std::sync::Arc;
     use tokio::sync::RwLock;
 
-    fn test_state() -> AppState<UserStoreType, BannedTokenStoreType> {
+    async fn test_state() -> AppState<UserStoreType, BannedTokenStoreType> {
+        let pg_pool = get_postgres_pool(&DATABASE_URL)
+            .await
+            .expect("Failed to create Postgres connection pool for tests");
+        let user_store = PostgresUserStore::new(pg_pool);
         AppState::new(
-            Arc::new(RwLock::new(HashmapUserStore::default())) as UserStoreType,
+            Arc::new(RwLock::new(user_store)) as UserStoreType,
             HashsetBannedTokenStore::default(),
             HashmapTwoFACodeStore::default(),
             Arc::new(MockEmailClient) as EmailClientType,
@@ -129,7 +135,7 @@ mod tests {
 
     #[tokio::test]
     async fn should_verify_stored_2fa_code_and_issue_auth_cookie() {
-        let state = test_state();
+        let state = test_state().await;
         let jar = CookieJar::new();
         let email = Email::parse("test@example.com").expect("valid email");
         let login_attempt_id = LoginAttemptId::default();
@@ -173,7 +179,7 @@ mod tests {
 
     #[tokio::test]
     async fn should_return_401_when_stored_2fa_data_does_not_match() {
-        let state = test_state();
+        let state = test_state().await;
         let jar = CookieJar::new();
         let email = Email::parse("test@example.com").expect("valid email");
         let login_attempt_id = LoginAttemptId::default();
