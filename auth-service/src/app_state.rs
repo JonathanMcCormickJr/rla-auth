@@ -7,8 +7,8 @@ use crate::{
 
 pub type UserStoreType = Arc<RwLock<PostgresUserStore>>;
 pub type BannedTokenStoreType =
-    crate::services::data_stores::hashset_banned_token_store::HashsetBannedTokenStore;
-pub type TwoFACodeStoreType = crate::services::data_stores::hashmap_2fa_code_store::HashmapTwoFACodeStore;
+    crate::services::data_stores::redis_banned_token_store::RedisBannedTokenStore;
+pub type TwoFACodeStoreType = crate::services::data_stores::redis_two_fa_code_store::RedisTwoFACodeStore;
 pub type TwoFACodeStoreHandle = Arc<RwLock<TwoFACodeStoreType>>;
 pub type EmailClientType = Arc<dyn crate::domain::EmailClient + Send + Sync>; // New!
 
@@ -20,7 +20,7 @@ pub struct AppState<T: Send + Sync, Btt: BannedTokenStore> {
     pub email_client: EmailClientType,
 }
 
-impl<T: Send + Sync, Btt: BannedTokenStore + Default> AppState<T, Btt> {
+impl<T: Send + Sync, Btt: BannedTokenStore> AppState<T, Btt> {
     pub fn new(
         user_store: T,
         banned_token_store: Btt,

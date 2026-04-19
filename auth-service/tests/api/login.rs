@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn should_return_422_if_malformed_credentials() {
-    let app = TestApp::new().await;
+    let mut app = TestApp::new().await;
 
     let body = json!({
         "email": "not-an-email",
@@ -15,26 +15,30 @@ async fn should_return_422_if_malformed_credentials() {
     let response = app.post_login(&body).await;
 
     assert_eq!(response.status().as_u16(), 422);
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
 async fn should_return_400_if_invalid_input() {
     // Call the log-in route with invalid credentials and assert that a
     // 400 HTTP status code is returned along with the appropriate error message.
-    let app = TestApp::new().await;
+    let mut app = TestApp::new().await;
     let body = json!({
         "email": get_random_email(),
         "password": "shor20489J4#t",
     });
     let response = app.post_login(&body).await;
     assert_eq!(response.status().as_u16(), 400);
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
 async fn should_return_401_if_incorrect_credentials() {
     // Call the log-in route with incorrect credentials and assert
     // that a 401 HTTP status code is returned along with the appropriate error message.
-    let app = TestApp::new().await;
+    let mut app = TestApp::new().await;
 
     // First, we need to create a user with known credentials. We can do this by calling the sign-up route.
     let email = get_random_email();
@@ -54,11 +58,13 @@ async fn should_return_401_if_incorrect_credentials() {
     });
     let response = app.post_login(&body).await;
     assert_eq!(response.status().as_u16(), 401);
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
 async fn should_return_200_if_valid_credentials_and_2fa_disabled() {
-    let app = TestApp::new().await;
+    let mut app = TestApp::new().await;
 
     let random_email = get_random_email();
 
@@ -87,11 +93,13 @@ async fn should_return_200_if_valid_credentials_and_2fa_disabled() {
         .expect("No auth cookie found");
 
     assert!(!auth_cookie.value().is_empty());
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
 async fn should_return_206_if_valid_credentials_and_2fa_enabled() {
-    let app = TestApp::new().await;
+    let mut app = TestApp::new().await;
 
     let random_email = get_random_email();
 
@@ -171,4 +179,6 @@ async fn should_return_206_if_valid_credentials_and_2fa_enabled() {
         .login_attempt_id
         .parse::<Uuid>()
         .expect("loginAttemptId should be a valid UUID");
+
+    app.clean_up().await;
 }

@@ -107,28 +107,39 @@ mod tests {
     use crate::{
         app_state::{EmailClientType, UserStoreType},
         domain::data_stores::TwoFACodeStoreError,
-        get_postgres_pool,
+        get_postgres_pool, get_redis_client,
         services::data_stores::{
-            hashmap_2fa_code_store::HashmapTwoFACodeStore,
-            hashset_banned_token_store::HashsetBannedTokenStore,
             mock_email_client::MockEmailClient,
             postgres_user_store::PostgresUserStore,
+            redis_banned_token_store::RedisBannedTokenStore,
+            redis_two_fa_code_store::RedisTwoFACodeStore,
         },
-        utils::constants::{DATABASE_URL, JWT_COOKIE_NAME},
+        utils::constants::{DATABASE_URL, JWT_COOKIE_NAME, REDIS_HOST_NAME},
     };
     use axum::Json;
     use std::sync::Arc;
     use tokio::sync::RwLock;
+
+    fn redis_connection() -> redis::Connection {
+        get_redis_client(REDIS_HOST_NAME.to_owned())
+            .expect("Failed to open Redis client for tests")
+            .get_connection()
+            .expect("Failed to get Redis connection for tests")
+    }
 
     async fn test_state() -> AppState<UserStoreType, BannedTokenStoreType> {
         let pg_pool = get_postgres_pool(&DATABASE_URL)
             .await
             .expect("Failed to create Postgres connection pool for tests");
         let user_store = PostgresUserStore::new(pg_pool);
+        let banned_token_store =
+            RedisBannedTokenStore::new(Arc::new(RwLock::new(redis_connection())));
+        let two_fa_code_store =
+            RedisTwoFACodeStore::new(Arc::new(RwLock::new(redis_connection())));
         AppState::new(
             Arc::new(RwLock::new(user_store)) as UserStoreType,
-            HashsetBannedTokenStore::default(),
-            HashmapTwoFACodeStore::default(),
+            banned_token_store,
+            two_fa_code_store,
             Arc::new(MockEmailClient) as EmailClientType,
         )
     }

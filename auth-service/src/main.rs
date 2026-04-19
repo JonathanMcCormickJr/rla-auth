@@ -1,11 +1,14 @@
 use auth_service::{
-    Application, app_state::{AppState, EmailClientType, UserStoreType}, get_postgres_pool, services::data_stores::{
-        hashmap_2fa_code_store::HashmapTwoFACodeStore,
-        hashset_banned_token_store::HashsetBannedTokenStore, mock_email_client::MockEmailClient,
+    Application,
+    app_state::{AppState, EmailClientType, UserStoreType},
+    get_postgres_pool, get_redis_client,
+    services::data_stores::{
+        mock_email_client::MockEmailClient,
         postgres_user_store::PostgresUserStore,
-    }, utils::constants::{
-        DATABASE_URL, prod
-    }
+        redis_banned_token_store::RedisBannedTokenStore,
+        redis_two_fa_code_store::RedisTwoFACodeStore,
+    },
+    utils::constants::{DATABASE_URL, REDIS_HOST_NAME, prod},
 };
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -16,8 +19,10 @@ async fn main() {
     let pg_pool = configure_postgresql().await;
 
     let user_store = PostgresUserStore::new(pg_pool);
-    let banned_token_store = HashsetBannedTokenStore::default();
-    let two_fa_code_store = HashmapTwoFACodeStore::default();
+    let banned_token_store =
+        RedisBannedTokenStore::new(Arc::new(RwLock::new(configure_redis())));
+    let two_fa_code_store =
+        RedisTwoFACodeStore::new(Arc::new(RwLock::new(configure_redis())));
     let email_client = Arc::new(MockEmailClient) as EmailClientType;
     let app_state = AppState::new(
         Arc::new(RwLock::new(user_store)) as UserStoreType,
@@ -39,11 +44,18 @@ async fn configure_postgresql() -> PgPool {
         .await
         .expect("Failed to create Postgres connection pool!");
 
-    // Run database migrations against our test database! 
+    // Run database migrations against our test database!
     sqlx::migrate!()
         .run(&pg_pool)
         .await
         .expect("Failed to run migrations");
 
     pg_pool
+}
+
+fn configure_redis() -> redis::Connection {
+    get_redis_client(REDIS_HOST_NAME.to_owned())
+        .expect("Failed to get Redis client")
+        .get_connection()
+        .expect("Failed to get Redis connection")
 }

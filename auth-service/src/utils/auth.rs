@@ -4,7 +4,10 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::{app_state::BannedTokenStoreType, domain::email::Email};
+use crate::{
+    app_state::BannedTokenStoreType,
+    domain::{data_stores::BannedTokenStore, email::Email},
+};
 
 use super::constants::{JWT_COOKIE_NAME, JWT_SECRET};
 
@@ -70,7 +73,12 @@ pub async fn validate_token(
     .claims;
 
     let banned_guard = banned.read().await;
-    if banned_guard.is_token_banned(token).unwrap_or(false) {
+    let token_owned = token.to_owned();
+    if banned_guard
+        .is_token_banned(&token_owned)
+        .await
+        .unwrap_or(false)
+    {
         Err(jsonwebtoken::errors::Error::from(
             jsonwebtoken::errors::ErrorKind::InvalidToken,
         ))
@@ -97,6 +105,20 @@ pub struct Claims {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        get_redis_client,
+        services::data_stores::redis_banned_token_store::RedisBannedTokenStore,
+        utils::constants::REDIS_HOST_NAME,
+    };
+    use std::sync::Arc;
+
+    fn redis_banned_token_store() -> RedisBannedTokenStore {
+        let conn = get_redis_client(REDIS_HOST_NAME.to_owned())
+            .expect("Failed to open Redis client")
+            .get_connection()
+            .expect("Failed to get Redis connection");
+        RedisBannedTokenStore::new(Arc::new(RwLock::new(conn)))
+    }
 
     #[tokio::test]
     async fn test_generate_auth_cookie() {
@@ -131,7 +153,7 @@ mod tests {
     async fn test_validate_token_with_valid_token() {
         let email = Email::parse("test@example.com").unwrap();
         let token = generate_auth_token(&email).unwrap();
-        let banned = RwLock::new(BannedTokenStoreType::default());
+        let banned = RwLock::new(redis_banned_token_store());
         let result = validate_token(&token, &banned).await.unwrap();
         assert_eq!(result.sub, "test@example.com");
 
@@ -146,7 +168,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_token_with_invalid_token() {
         let token = "invalid_token".to_owned();
-        let banned = RwLock::new(BannedTokenStoreType::default());
+        let banned = RwLock::new(redis_banned_token_store());
         let result = validate_token(&token, &banned).await;
         assert!(result.is_err());
     }

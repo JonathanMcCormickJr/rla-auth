@@ -1,16 +1,16 @@
 use auth_service::app_state::{AppState, BannedTokenStoreType, EmailClientType, UserStoreType};
-use auth_service::get_postgres_pool;
 use auth_service::services::data_stores::{
-    hashmap_2fa_code_store::HashmapTwoFACodeStore,
-    hashset_banned_token_store::HashsetBannedTokenStore, mock_email_client::MockEmailClient,
-    postgres_user_store::PostgresUserStore,
+    mock_email_client::MockEmailClient, postgres_user_store::PostgresUserStore,
+    redis_banned_token_store::RedisBannedTokenStore,
+    redis_two_fa_code_store::RedisTwoFACodeStore,
 };
-use auth_service::utils::constants::DATABASE_URL;
-use auth_service::Application;
+use auth_service::utils::constants::{DATABASE_URL, REDIS_HOST_NAME};
+use auth_service::{get_postgres_pool, get_redis_client, Application};
 use reqwest::{cookie::Jar, Client};
 use serde_json::json;
-use sqlx::postgres::PgPoolOptions;
-use sqlx::{Executor, PgPool};
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use sqlx::{Connection, Executor, PgConnection, PgPool};
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -20,15 +20,19 @@ pub struct TestApp {
     pub cookie_jar: Arc<Jar>,
     pub http_client: reqwest::Client,
     pub app_state: AppState<UserStoreType, BannedTokenStoreType>,
+    pub test_db_name: String,
+    pub clean_up_called: bool,
 }
 
 impl TestApp {
     pub async fn new() -> Self {
-        let pg_pool = configure_postgresql().await;
+        let (pg_pool, test_db_name) = configure_postgresql().await;
 
         let user_store = Arc::new(RwLock::new(PostgresUserStore::new(pg_pool))) as UserStoreType;
-        let banned_token_store = HashsetBannedTokenStore::default();
-        let two_fa_code_store = HashmapTwoFACodeStore::default();
+        let banned_token_store =
+            RedisBannedTokenStore::new(Arc::new(RwLock::new(redis_connection())));
+        let two_fa_code_store =
+            RedisTwoFACodeStore::new(Arc::new(RwLock::new(redis_connection())));
         let app_state = AppState::new(
             user_store,
             banned_token_store,
@@ -60,6 +64,8 @@ impl TestApp {
             cookie_jar,
             http_client,
             app_state,
+            test_db_name,
+            clean_up_called: false,
         }
     }
 
@@ -133,6 +139,19 @@ impl TestApp {
             .await
             .expect("Failed to execute request.")
     }
+
+    pub async fn clean_up(&mut self) {
+        delete_database(&self.test_db_name).await;
+        self.clean_up_called = true;
+    }
+}
+
+impl Drop for TestApp {
+    fn drop(&mut self) {
+        if !self.clean_up_called {
+            panic!("TestApp was dropped without calling clean_up()");
+        }
+    }
 }
 
 pub fn get_random_email() -> String {
@@ -140,7 +159,14 @@ pub fn get_random_email() -> String {
     format!("{}@example.com", random_uuid)
 }
 
-async fn configure_postgresql() -> PgPool {
+fn redis_connection() -> redis::Connection {
+    get_redis_client(REDIS_HOST_NAME.to_owned())
+        .expect("Failed to open Redis client")
+        .get_connection()
+        .expect("Failed to get Redis connection")
+}
+
+async fn configure_postgresql() -> (PgPool, String) {
     let postgresql_conn_url = DATABASE_URL.to_owned();
 
     // We are creating a new database for each test case, and we need to ensure each database has a unique name!
@@ -150,10 +176,11 @@ async fn configure_postgresql() -> PgPool {
 
     let postgresql_conn_url_with_db = format!("{}/{}", postgresql_conn_url, db_name);
 
-    // Create a new connection pool and return it
-    get_postgres_pool(&postgresql_conn_url_with_db)
+    let pool = get_postgres_pool(&postgresql_conn_url_with_db)
         .await
-        .expect("Failed to create Postgres connection pool!")
+        .expect("Failed to create Postgres connection pool!");
+
+    (pool, db_name)
 }
 
 async fn configure_database(db_conn_string: &str, db_name: &str) {
@@ -182,4 +209,39 @@ async fn configure_database(db_conn_string: &str, db_name: &str) {
         .run(&connection)
         .await
         .expect("Failed to migrate the database");
+}
+
+async fn delete_database(db_name: &str) {
+    let postgresql_conn_url: String = DATABASE_URL.to_owned();
+
+    let connection_options = PgConnectOptions
+        ::from_str(&postgresql_conn_url)
+        .expect("Failed to parse PostgreSQL connection string");
+
+    let mut connection = PgConnection::connect_with(&connection_options)
+        .await
+        .expect("Failed to connect to Postgres");
+
+    // Kill any active connections to the database
+    connection
+        .execute(
+            format!(
+                r#"
+                SELECT pg_terminate_backend(pg_stat_activity.pid)
+                FROM pg_stat_activity
+                WHERE pg_stat_activity.datname = '{}'
+                  AND pid <> pg_backend_pid();
+        "#,
+                db_name
+            )
+            .as_str(),
+        )
+        .await
+        .expect("Failed to drop the database.");
+
+    // Drop the database
+    connection
+        .execute(format!(r#"DROP DATABASE "{}";"#, db_name).as_str())
+        .await
+        .expect("Failed to drop the database.");
 }

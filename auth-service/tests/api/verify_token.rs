@@ -8,18 +8,20 @@ use serde_json::json;
 
 #[tokio::test]
 async fn should_return_422_if_malformed_input() {
-    let app = TestApp::new().await;
+    let mut app = TestApp::new().await;
 
     let body = "not a valid JSON body";
 
     let response = app.post_verify_token(&body).await;
 
     assert_eq!(response.status().as_u16(), 422);
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
 async fn should_return_400_if_token_is_missing() {
-    let app = TestApp::new().await;
+    let mut app = TestApp::new().await;
 
     let body = json!({
         "token": "   "
@@ -28,11 +30,13 @@ async fn should_return_400_if_token_is_missing() {
     let response = app.post_verify_token(&body).await;
 
     assert_eq!(response.status().as_u16(), 400);
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
 async fn should_return_401_if_token_is_invalid() {
-    let app = TestApp::new().await;
+    let mut app = TestApp::new().await;
 
     let body = json!({
         "token": "not.a.valid.jwt"
@@ -41,11 +45,13 @@ async fn should_return_401_if_token_is_invalid() {
     let response = app.post_verify_token(&body).await;
 
     assert_eq!(response.status().as_u16(), 401);
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
 async fn should_return_200_if_token_is_valid() {
-    let app = TestApp::new().await;
+    let mut app = TestApp::new().await;
 
     let email = crate::helpers::get_random_email();
     let password = "Password123!";
@@ -78,11 +84,13 @@ async fn should_return_200_if_token_is_valid() {
     let verify_response = app.post_verify_token(&verify_body).await;
 
     assert_eq!(verify_response.status().as_u16(), 200);
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
 async fn should_return_401_if_banned_token() {
-    let app = TestApp::new().await;
+    let mut app = TestApp::new().await;
 
     let email = crate::helpers::get_random_email();
     let password = "Password123!";
@@ -120,12 +128,14 @@ async fn should_return_401_if_banned_token() {
     let verify_response = app.post_verify_token(&verify_body).await;
 
     assert_eq!(verify_response.status().as_u16(), 401);
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
 async fn should_return_200_if_correct_code() {
     // Make sure to assert the auth cookie gets set
-    let app = TestApp::new().await;
+    let mut app = TestApp::new().await;
 
     let email = crate::helpers::get_random_email();
     let password = "Password123!";
@@ -178,4 +188,6 @@ async fn should_return_200_if_correct_code() {
         .expect("No auth cookie found after successful 2FA verification");
 
     assert!(!auth_cookie.value().is_empty());
+
+    app.clean_up().await;
 }
