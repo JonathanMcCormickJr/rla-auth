@@ -21,9 +21,7 @@ cd ..
 
 ## Backing services (Postgres + Redis)
 
-Postgres and Redis run as standalone Docker containers (`ps-db` on host port 5432, `redis-db` on host port 6379), managed by the reset scripts in `auth-service/scripts/`. They are used by **both** the local `cargo run` workflow and the Docker Compose workflow.
-
-`docker.sh` invokes `reset_all.sh` automatically, so for the Compose workflow you usually don't need to call the reset scripts directly. Run them manually when you want fresh state for local `cargo run`, or when only one port is stuck:
+Postgres and Redis are defined as Docker Compose services (`db` on host port 5432, `redis` on host port 6379) in `compose.yml`. The reset scripts in `auth-service/scripts/` are thin wrappers around `docker compose` that tear down a service (including its volume) and start it again with fresh state:
 
 ```bash
 sudo ./auth-service/scripts/reset_all.sh             # reset both
@@ -31,7 +29,7 @@ sudo ./auth-service/scripts/reset-docker-db.sh       # reset only Postgres
 sudo ./auth-service/scripts/reset-docker-redis.sh    # reset only Redis
 ```
 
-These scripts intentionally *do not* go through Docker Compose — they own the `ps-db` and `redis-db` container lifecycle so Compose does not fight them for ports 5432/6379.
+`docker.sh` invokes `reset_all.sh` automatically, so for the Compose workflow you usually don't need to call the reset scripts directly. Reach for them when you want a clean DB for local `cargo run`, or when state has gotten wedged.
 
 ## Run servers locally (manually)
 
@@ -62,7 +60,7 @@ visit http://localhost:3000
 sudo ./docker.sh
 ```
 
-That single command (a) loads `auth-service/.env`, (b) resets the standalone Postgres + Redis containers via `reset_all.sh`, and (c) builds and starts `auth-service` + `app-service` via `docker compose`. The Compose file only defines `auth-service` and `app-service`; they reach the standalone `ps-db` / `redis-db` containers via `host.docker.internal` (wired with `extra_hosts: host-gateway` for Linux).
+That single command (a) loads `auth-service/.env`, (b) resets the Postgres + Redis compose services via `reset_all.sh`, and (c) builds and starts `auth-service` + `app-service`. Inside the compose network auth-service reaches Postgres at `db:5432` and Redis at `redis:6379` (the auth-service Dockerfile sets `REDIS_HOST_NAME=redis`).
 
 visit http://localhost:8000 and http://localhost:3000
 
