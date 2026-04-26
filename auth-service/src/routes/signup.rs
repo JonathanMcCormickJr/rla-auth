@@ -3,17 +3,19 @@ use crate::{
     domain::{data_stores::UserStore, email::Email, password::HashedPassword, AuthAPIError, User},
 };
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
+
+#[tracing::instrument(name = "Signup", skip_all)]
 pub async fn signup(
     State(state): State<AppState<UserStoreType, BannedTokenStoreType>>,
     Json(request): Json<SignupRequest>,
 ) -> Result<impl IntoResponse, AuthAPIError> {
-    // Create a new `User` instance using data in the `request`
     let user = User {
         uuid: uuid::Uuid::new_v4(),
-        email: Email::parse(&request.email).map_err(|_| AuthAPIError::InvalidCredentials)?,
-        password: HashedPassword::parse(request.password.clone())
+        email: Email::parse(request.email).map_err(|_| AuthAPIError::InvalidCredentials)?,
+        password: HashedPassword::parse(request.password)
             .await
             .map_err(|_| AuthAPIError::InvalidCredentials)?,
         requires_2fa: request.requires_2fa,
@@ -25,9 +27,9 @@ pub async fn signup(
         return Err(AuthAPIError::UserAlreadyExists);
     }
 
-    UserStore::add_user(&mut *user_store, user)
-        .await
-        .map_err(|_| AuthAPIError::UnexpectedError)?;
+    if let Err(e) = UserStore::add_user(&mut *user_store, user).await {
+        return Err(AuthAPIError::UnexpectedError(e.into()));
+    }
 
     let response = Json(SignupResponse {
         message: "User created successfully!".to_string(),
@@ -38,8 +40,8 @@ pub async fn signup(
 
 #[derive(Deserialize)]
 pub struct SignupRequest {
-    pub email: String,
-    pub password: String,
+    pub email: SecretString,
+    pub password: SecretString,
     #[serde(rename = "requires2FA")]
     pub requires_2fa: bool,
 }

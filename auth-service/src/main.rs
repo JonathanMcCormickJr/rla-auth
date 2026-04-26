@@ -8,7 +8,7 @@ use auth_service::{
         redis_banned_token_store::RedisBannedTokenStore,
         redis_two_fa_code_store::RedisTwoFACodeStore,
     },
-    utils::constants::{DATABASE_URL, REDIS_HOST_NAME, prod},
+    utils::{constants::{DATABASE_URL, REDIS_HOST_NAME, prod}, tracing::init_tracing},
 };
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -16,6 +16,8 @@ use tokio::sync::RwLock;
 
 #[tokio::main]
 async fn main() {
+    color_eyre::install().expect("Failed to install color_eyre");
+    init_tracing().expect("Failed to initialize tracing");
     let pg_pool = configure_postgresql().await;
 
     let user_store = PostgresUserStore::new(pg_pool);

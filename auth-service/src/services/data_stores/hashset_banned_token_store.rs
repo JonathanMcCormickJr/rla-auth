@@ -1,4 +1,7 @@
-use crate::domain::data_stores::BannedTokenStore;
+use color_eyre::eyre::eyre;
+use secrecy::{ExposeSecret, SecretString};
+
+use crate::domain::data_stores::{BannedTokenStore, BannedTokenStoreError};
 
 #[derive(Clone)]
 pub struct HashsetBannedTokenStore {
@@ -15,20 +18,15 @@ impl Default for HashsetBannedTokenStore {
 
 #[async_trait::async_trait]
 impl BannedTokenStore for HashsetBannedTokenStore {
-    async fn add_token(
-        &mut self,
-        token: String,
-    ) -> Result<(), crate::domain::data_stores::BannedTokenStoreError> {
-        self.add_banned_token(token)
-            .map_err(|_| crate::domain::data_stores::BannedTokenStoreError::UnexpectedError)
+    async fn add_token(&mut self, token: SecretString) -> Result<(), BannedTokenStoreError> {
+        self.add_banned_token(token.expose_secret().to_owned())
+            .map_err(|_| BannedTokenStoreError::UnexpectedError(eyre!("failed to add token")))
     }
 
-    async fn is_token_banned(
-        &self,
-        token: &String,
-    ) -> Result<bool, crate::domain::data_stores::BannedTokenStoreError> {
-        HashsetBannedTokenStore::is_token_banned(self, token.as_str())
-            .map_err(|_| crate::domain::data_stores::BannedTokenStoreError::UnexpectedError)
+    async fn contains_token(&self, token: &SecretString) -> Result<bool, BannedTokenStoreError> {
+        HashsetBannedTokenStore::is_token_banned(self, token.expose_secret()).map_err(|_| {
+            BannedTokenStoreError::UnexpectedError(eyre!("failed to check token"))
+        })
     }
 }
 

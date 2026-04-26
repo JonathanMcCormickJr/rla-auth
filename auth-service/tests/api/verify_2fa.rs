@@ -4,6 +4,7 @@ use auth_service::{
     routes::TwoFactorAuthResponse,
     ErrorResponse,
 };
+use secrecy::{ExposeSecret, SecretString};
 use serde_json::json;
 
 #[tokio::test]
@@ -86,7 +87,8 @@ async fn should_return_401_if_incorrect_credentials() {
         .await
         .expect("login should return a 2FA challenge body");
 
-    let email = Email::parse(&email).expect("signup email should be valid");
+    let email = Email::parse(SecretString::new(email.clone().into_boxed_str()))
+        .expect("signup email should be valid");
     let (_, stored_code) = app
         .app_state
         .two_fa_code_store
@@ -96,14 +98,14 @@ async fn should_return_401_if_incorrect_credentials() {
         .await
         .expect("2FA code should exist after login challenge");
 
-    let invalid_code = if stored_code.as_ref() == "000000" {
+    let invalid_code = if stored_code.as_ref().expose_secret() == "111111" {
         "999999"
     } else {
-        "000000"
+        "111111"
     };
 
     let verify_body = json!({
-        "email": email.as_ref(),
+        "email": email.as_ref().expose_secret(),
         "login_attempt_id": login_response_body.login_attempt_id,
         "code": invalid_code
     });
@@ -151,7 +153,8 @@ async fn should_return_401_if_old_code() {
         .await
         .expect("first login should return a 2FA challenge body");
 
-    let email = Email::parse(&email).expect("signup email should be valid");
+    let email = Email::parse(SecretString::new(email.clone().into_boxed_str()))
+        .expect("signup email should be valid");
     let (_, first_code) = app
         .app_state
         .two_fa_code_store
@@ -174,9 +177,9 @@ async fn should_return_401_if_old_code() {
     );
 
     let old_verify_body = json!({
-        "email": email.as_ref(),
+        "email": email.as_ref().expose_secret(),
         "login_attempt_id": first_challenge.login_attempt_id,
-        "code": first_code.as_ref()
+        "code": first_code.as_ref().expose_secret()
     });
 
     let old_verify_response = app.post_verify_2fa(&old_verify_body).await;
@@ -220,7 +223,8 @@ async fn should_return_401_if_same_code_twice() {
         .await
         .expect("login should return a 2FA challenge body");
 
-    let email = Email::parse(&email).expect("signup email should be valid");
+    let email = Email::parse(SecretString::new(email.clone().into_boxed_str()))
+        .expect("signup email should be valid");
     let (_, code) = app
         .app_state
         .two_fa_code_store
@@ -231,9 +235,9 @@ async fn should_return_401_if_same_code_twice() {
         .expect("2FA code should exist after login challenge");
 
     let verify_body = json!({
-        "email": email.as_ref(),
+        "email": email.as_ref().expose_secret(),
         "login_attempt_id": challenge.login_attempt_id,
-        "code": code.as_ref(),
+        "code": code.as_ref().expose_secret(),
     });
 
     let first_verify_response = app.post_verify_2fa(&verify_body).await;

@@ -45,9 +45,14 @@ mod tests {
 
     #[tokio::test]
     async fn should_add_and_get_code() {
+        use secrecy::SecretString;
+
         let mut store = HashmapTwoFACodeStore::default();
 
-        let email = Email::parse("test@example.com").unwrap();
+        let email = Email::parse(SecretString::new(
+            "test@example.com".to_owned().into_boxed_str(),
+        ))
+        .unwrap();
         let login_attempt_id = LoginAttemptId::default();
         let code = TwoFACode::default();
 

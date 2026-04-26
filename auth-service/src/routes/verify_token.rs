@@ -7,6 +7,7 @@ use crate::{
     utils::auth::validate_token,
 };
 
+#[tracing::instrument(name = "Verify Token", skip_all)]
 pub async fn verify_token(
     State(state): State<AppState<UserStoreType, BannedTokenStoreType>>,
     Json(request): Json<VerifyTokenRequest>,

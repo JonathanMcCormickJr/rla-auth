@@ -10,6 +10,8 @@ use crate::{
 };
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use axum_extra::extract::CookieJar;
+use color_eyre::eyre::eyre;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 
 pub async fn login(
@@ -17,7 +19,7 @@ pub async fn login(
     jar: CookieJar,
     Json(request): Json<LoginRequest>,
 ) -> (CookieJar, Result<impl IntoResponse, AuthAPIError>) {
-    let email = match Email::parse(&request.email) {
+    let email = match Email::parse(request.email) {
         Ok(email) => email,
         Err(_) => return (jar, Err(AuthAPIError::MalformedCredentials)),
     };
@@ -31,8 +33,10 @@ pub async fn login(
                 UserStoreError::UserNotFound => AuthAPIError::InvalidCredentials,
                 UserStoreError::MalformedCredentials => AuthAPIError::MalformedCredentials,
                 UserStoreError::InvalidCredentials => AuthAPIError::AuthenticationFailed,
-                UserStoreError::UnexpectedError => AuthAPIError::UnexpectedError,
-                UserStoreError::UserAlreadyExists => AuthAPIError::UnexpectedError,
+                UserStoreError::UnexpectedError(report) => AuthAPIError::UnexpectedError(report),
+                UserStoreError::UserAlreadyExists => AuthAPIError::UnexpectedError(eyre!(
+                    "Unexpected UserAlreadyExists from get_user during login"
+                )),
             };
 
             return (jar, Err(auth_error));
@@ -67,24 +71,24 @@ async fn handle_2fa(
     let two_fa_code = TwoFACode::default();
     let mut two_fa_code_store = state.two_fa_code_store.write().await;
 
-    if let Err(_) = two_fa_code_store
+    if let Err(e) = two_fa_code_store
         .add_code(email.clone(), login_attempt_id.clone(), two_fa_code.clone())
         .await
     {
-        return (jar, Err(AuthAPIError::UnexpectedError));
+        return (jar, Err(AuthAPIError::UnexpectedError(e.into())));
     }
 
-    if let Err(_) = state
+    if let Err(e) = state
         .email_client
-        .send_email(email, "Your 2FA Code", &two_fa_code.as_ref())
+        .send_email(email, "2FA Code", two_fa_code.as_ref().expose_secret())
         .await
     {
-        return (jar, Err(AuthAPIError::UnexpectedError));
+        return (jar, Err(AuthAPIError::UnexpectedError(e)));
     }
 
     let response = LoginResponse::TwoFactorAuth(TwoFactorAuthResponse {
         message: "2FA required".to_string(),
-        login_attempt_id: login_attempt_id.as_ref().to_owned(),
+        login_attempt_id: login_attempt_id.as_ref().expose_secret().to_owned(),
     });
 
     (jar, Ok((StatusCode::PARTIAL_CONTENT, Json(response))))
@@ -99,7 +103,7 @@ async fn handle_no_2fa(
 ) {
     let auth_cookie = match generate_auth_cookie(email) {
         Ok(cookie) => cookie,
-        Err(_) => return (jar, Err(AuthAPIError::UnexpectedError)),
+        Err(e) => return (jar, Err(AuthAPIError::UnexpectedError(e))),
     };
 
     let updated_jar = jar.add(auth_cookie);
@@ -111,8 +115,8 @@ async fn handle_no_2fa(
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
-    pub email: String,
-    pub password: String,
+    pub email: SecretString,
+    pub password: SecretString,
 }
 
 #[derive(Debug, Serialize)]

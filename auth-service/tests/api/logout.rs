@@ -81,8 +81,9 @@ async fn should_return_200_if_valid_jwt_cookie() {
     assert_eq!(logout_response.status().as_u16(), 200);
 
     let banned_tokens = app.app_state.banned_token_store.read().await;
+    let token_secret = secrecy::SecretString::new(jwt_token.clone().into_boxed_str());
     assert!(banned_tokens
-        .is_token_banned(&jwt_token)
+        .contains_token(&token_secret)
         .await
         .expect("Failed to inspect banned token store"));
     drop(banned_tokens);

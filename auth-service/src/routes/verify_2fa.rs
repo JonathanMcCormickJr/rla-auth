@@ -10,14 +10,18 @@ use crate::{
 };
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use axum_extra::extract::CookieJar;
+use color_eyre::eyre::eyre;
+#[cfg_attr(not(test), allow(unused_imports))]
+use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 
+#[tracing::instrument(name = "Verify 2FA", skip_all)]
 pub async fn verify_2fa(
     State(state): State<AppState<UserStoreType, BannedTokenStoreType>>,
     jar: CookieJar,
     Json(request): Json<Verify2FARequest>,
 ) -> (CookieJar, Result<impl IntoResponse, AuthAPIError>) {
-    let email = match Email::parse(&request.email) {
+    let email = match Email::parse(SecretString::new(request.email.into_boxed_str())) {
         Ok(email) => email,
         Err(_) => return (jar, Err(AuthAPIError::MalformedCredentials)),
     };
@@ -55,10 +59,15 @@ pub async fn verify_2fa(
                     | Err(UserStoreError::InvalidCredentials) => {
                         (jar, Err(AuthAPIError::InvalidCredentials))
                     }
-                    Err(UserStoreError::UnexpectedError)
-                    | Err(UserStoreError::UserAlreadyExists) => {
-                        (jar, Err(AuthAPIError::UnexpectedError))
+                    Err(UserStoreError::UnexpectedError(report)) => {
+                        (jar, Err(AuthAPIError::UnexpectedError(report)))
                     }
+                    Err(UserStoreError::UserAlreadyExists) => (
+                        jar,
+                        Err(AuthAPIError::UnexpectedError(eyre!(
+                            "Unexpected UserAlreadyExists from get_user during verify_2fa"
+                        ))),
+                    ),
                 };
             }
         }
@@ -79,14 +88,14 @@ pub async fn verify_2fa(
     {
         let mut two_fa_code_store = state.two_fa_code_store.write().await;
 
-        if two_fa_code_store.remove_code(&email).await.is_err() {
-            return (jar, Err(AuthAPIError::UnexpectedError));
+        if let Err(e) = two_fa_code_store.remove_code(&email).await {
+            return (jar, Err(AuthAPIError::UnexpectedError(e.into())));
         }
     }
 
     let auth_cookie = match generate_auth_cookie(&email) {
         Ok(cookie) => cookie,
-        Err(_) => return (jar, Err(AuthAPIError::UnexpectedError)),
+        Err(e) => return (jar, Err(AuthAPIError::UnexpectedError(e))),
     };
 
     (jar.add(auth_cookie), Ok(StatusCode::OK.into_response()))
@@ -148,7 +157,10 @@ mod tests {
     async fn should_verify_stored_2fa_code_and_issue_auth_cookie() {
         let state = test_state().await;
         let jar = CookieJar::new();
-        let email = Email::parse("test@example.com").expect("valid email");
+        let email = Email::parse(SecretString::new(
+            "test@example.com".to_owned().into_boxed_str(),
+        ))
+        .expect("valid email");
         let login_attempt_id = LoginAttemptId::default();
         let two_fa_code = TwoFACode::default();
 
@@ -161,9 +173,9 @@ mod tests {
             .expect("2FA code should be stored");
 
         let request = Verify2FARequest {
-            email: email.as_ref().to_owned(),
-            login_attempt_id: login_attempt_id.as_ref().to_owned(),
-            code: two_fa_code.as_ref().to_owned(),
+            email: email.as_ref().expose_secret().to_owned(),
+            login_attempt_id: login_attempt_id.as_ref().expose_secret().to_owned(),
+            code: two_fa_code.as_ref().expose_secret().to_owned(),
         };
 
         let (updated_jar, response) = verify_2fa(State(state.clone()), jar, Json(request)).await;
@@ -192,7 +204,10 @@ mod tests {
     async fn should_return_401_when_stored_2fa_data_does_not_match() {
         let state = test_state().await;
         let jar = CookieJar::new();
-        let email = Email::parse("test@example.com").expect("valid email");
+        let email = Email::parse(SecretString::new(
+            "test@example.com".to_owned().into_boxed_str(),
+        ))
+        .expect("valid email");
         let login_attempt_id = LoginAttemptId::default();
         let stored_two_fa_code = TwoFACode::parse("123456".to_string()).expect("valid code");
         let invalid_two_fa_code = TwoFACode::parse("654321".to_string()).expect("valid code");
@@ -206,9 +221,9 @@ mod tests {
             .expect("2FA code should be stored");
 
         let request = Verify2FARequest {
-            email: email.as_ref().to_owned(),
-            login_attempt_id: login_attempt_id.as_ref().to_owned(),
-            code: invalid_two_fa_code.as_ref().to_owned(),
+            email: email.as_ref().expose_secret().to_owned(),
+            login_attempt_id: login_attempt_id.as_ref().expose_secret().to_owned(),
+            code: invalid_two_fa_code.as_ref().expose_secret().to_owned(),
         };
 
         let (_, response) = verify_2fa(State(state), jar, Json(request)).await;

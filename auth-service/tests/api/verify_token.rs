@@ -162,7 +162,9 @@ async fn should_return_200_if_correct_code() {
         .await
         .expect("2FA challenge body should be returned");
 
-    let parsed_email = Email::parse(&email).expect("signup email should be valid");
+    let parsed_email =
+        Email::parse(secrecy::SecretString::new(email.clone().into_boxed_str()))
+            .expect("signup email should be valid");
     let (_, code) = app
         .app_state
         .two_fa_code_store
@@ -173,9 +175,9 @@ async fn should_return_200_if_correct_code() {
         .expect("2FA code should exist after login challenge");
 
     let verify_body = json!({
-        "email": parsed_email.as_ref(),
+        "email": secrecy::ExposeSecret::expose_secret(parsed_email.as_ref()),
         "login_attempt_id": challenge.login_attempt_id,
-        "code": code.as_ref(),
+        "code": secrecy::ExposeSecret::expose_secret(code.as_ref()),
     });
 
     let verify_response = app.post_verify_2fa(&verify_body).await;
