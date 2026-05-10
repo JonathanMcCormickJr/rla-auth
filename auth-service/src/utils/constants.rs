@@ -8,6 +8,8 @@ lazy_static! {
     pub static ref JWT_SECRET: SecretString = set_token();
     pub static ref DATABASE_URL: SecretString = set_database_url();
     pub static ref REDIS_HOST_NAME: String = set_redis_host();
+    pub static ref REDIS_PASSWORD: Option<SecretString> = set_redis_password();
+    pub static ref RESEND_API_KEY: SecretString = set_resend_auth_token();
 }
 
 fn set_token() -> SecretString {
@@ -36,16 +38,56 @@ fn set_redis_host() -> String {
 pub const JWT_COOKIE_NAME: &str = "jwt";
 pub const DEFAULT_REDIS_HOSTNAME: &str = "127.0.0.1";
 
+fn set_redis_password() -> Option<SecretString> {
+    dotenv().ok();
+    let boxed_secret = std_env::var(env::REDIS_PASSWORD_ENV_VAR);
+    match boxed_secret {
+        Ok(s) => Ok(SecretString::new(s)),
+        Err(e) => None,
+    }
+}
+
+    -SecretString::new(
+        std_env::var(env::REDIS_PASSWORD_ENV_VAR)
+            .expect("REDIS_PASSWORD_ENV_VAR must be set.")
+            .into_boxed_str(),
+    )
+}
+fn set_resend_auth_token() -> SecretString {
+    dotenv().ok();
+    SecretString::new(
+        std_env::var(env::RESEND_AUTH_TOKEN_ENV_VAR)
+            .expect("RESEND_API_KEY must be set.")
+            .into_boxed_str(),
+    )
+}
 pub mod env {
     pub const JWT_SECRET_ENV_VAR: &str = "JWT_SECRET";
     pub const DATABASE_URL_ENV_VAR: &str = "DATABASE_URL";
     pub const REDIS_HOST_NAME_ENV_VAR: &str = "REDIS_HOST_NAME";
+    pub const POSTMARK_AUTH_TOKEN_ENV_VAR: &str = "POSTMARK_AUTH_TOKEN";
+    pub const REDIS_PASSWORD_ENV_VAR: &str = "REDIS_PASSWORD";
+    pub const RESEND_AUTH_TOKEN_ENV_VAR: &str = "RESEND_API_KEY";
 }
 
 pub mod prod {
     pub const APP_ADDRESS: &str = "0.0.0.0:3000";
+    pub mod email_client {
+        use std::time::Duration;
+
+        pub const BASE_URL: &str = "https://api.postmarkapp.com/email";
+        // If you created your own Postmark account, make sure to use your email address!
+        pub const SENDER: &str = "bogdan@codeiron.io";
+        pub const TIMEOUT: Duration = std::time::Duration::from_secs(10);
+    }
 }
 
 pub mod test {
     pub const APP_ADDRESS: &str = "127.0.0.1:0";
+    pub mod email_client {
+        use std::time::Duration;
+
+        pub const SENDER: &str = "test@email.com";
+        pub const TIMEOUT: Duration = std::time::Duration::from_millis(200);
+    }
 }
