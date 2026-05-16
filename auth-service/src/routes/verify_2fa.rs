@@ -123,7 +123,10 @@ mod tests {
             redis_banned_token_store::RedisBannedTokenStore,
             redis_two_fa_code_store::RedisTwoFACodeStore,
         },
-        utils::constants::{DATABASE_URL, JWT_COOKIE_NAME, REDIS_HOST_NAME},
+        utils::{
+            constants::{DATABASE_URL, JWT_COOKIE_NAME, REDIS_HOST_NAME},
+            docker_test_env::DockerEnv,
+        },
     };
     use axum::Json;
     use std::sync::Arc;
@@ -136,7 +139,8 @@ mod tests {
             .expect("Failed to get Redis connection for tests")
     }
 
-    async fn test_state() -> AppState<UserStoreType, BannedTokenStoreType> {
+    async fn test_state() -> (DockerEnv, AppState<UserStoreType, BannedTokenStoreType>) {
+        let docker_env = DockerEnv::ensure();
         let pg_pool = get_postgres_pool(&DATABASE_URL)
             .await
             .expect("Failed to create Postgres connection pool for tests");
@@ -145,17 +149,18 @@ mod tests {
             RedisBannedTokenStore::new(Arc::new(RwLock::new(redis_connection())));
         let two_fa_code_store =
             RedisTwoFACodeStore::new(Arc::new(RwLock::new(redis_connection())));
-        AppState::new(
+        let state = AppState::new(
             Arc::new(RwLock::new(user_store)) as UserStoreType,
             banned_token_store,
             two_fa_code_store,
             Arc::new(MockEmailClient) as EmailClientType,
-        )
+        );
+        (docker_env, state)
     }
 
     #[tokio::test]
     async fn should_verify_stored_2fa_code_and_issue_auth_cookie() {
-        let state = test_state().await;
+        let (_docker_env, state) = test_state().await;
         let jar = CookieJar::new();
         let email = Email::parse(SecretString::new(
             "test@example.com".to_owned().into_boxed_str(),
@@ -202,7 +207,7 @@ mod tests {
 
     #[tokio::test]
     async fn should_return_401_when_stored_2fa_data_does_not_match() {
-        let state = test_state().await;
+        let (_docker_env, state) = test_state().await;
         let jar = CookieJar::new();
         let email = Email::parse(SecretString::new(
             "test@example.com".to_owned().into_boxed_str(),

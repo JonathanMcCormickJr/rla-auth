@@ -9,10 +9,10 @@ use auth_service::{
             redis_banned_token_store::RedisBannedTokenStore,
             redis_two_fa_code_store::RedisTwoFACodeStore,
         },
-        postmark_email_client::PostmarkEmailClient,
+        resend_email_client::ResendEmailClient,
     },
     utils::{
-        constants::{prod, DATABASE_URL, POSTMARK_AUTH_TOKEN, REDIS_HOST_NAME},
+        constants::{DATABASE_URL, REDIS_HOST_NAME, RESEND_API_KEY, prod},
         tracing::init_tracing,
     },
 };
@@ -33,7 +33,7 @@ async fn main() {
         RedisBannedTokenStore::new(Arc::new(RwLock::new(configure_redis())));
     let two_fa_code_store =
         RedisTwoFACodeStore::new(Arc::new(RwLock::new(configure_redis())));
-    let email_client = Arc::new(configure_postmark_email_client());
+    let email_client = Arc::new(configure_resend_email_client());
     let app_state = AppState::new(
         Arc::new(RwLock::new(user_store)) as UserStoreType,
         banned_token_store,
@@ -70,19 +70,19 @@ fn configure_redis() -> redis::Connection {
         .expect("Failed to get Redis connection")
 }
 
-fn configure_postmark_email_client() -> PostmarkEmailClient {
+fn configure_resend_email_client() -> ResendEmailClient {
     let http_client = Client::builder()
         .timeout(prod::email_client::TIMEOUT)
         .build()
         .expect("Failed to build HTTP client");
 
-    PostmarkEmailClient::new(
+    ResendEmailClient::new(
         prod::email_client::BASE_URL.to_owned(),
         Email::parse(SecretString::new(
-            prod::email_client::SENDER.to_owned().into_boxed_str(),
+            prod::email_client::SENDER_RESEND.to_owned().into_boxed_str(),
         ))
         .unwrap(),
-        POSTMARK_AUTH_TOKEN.to_owned(),
+        RESEND_API_KEY.to_owned(),
         http_client,
     )
 }

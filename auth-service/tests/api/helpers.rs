@@ -5,6 +5,7 @@ use auth_service::services::data_stores::{
     redis_two_fa_code_store::RedisTwoFACodeStore,
 };
 use auth_service::utils::constants::{DATABASE_URL, REDIS_HOST_NAME};
+use auth_service::utils::docker_test_env::DockerEnv;
 use auth_service::{get_postgres_pool, get_redis_client, Application};
 use secrecy::{ExposeSecret, SecretString};
 use reqwest::{cookie::Jar, Client};
@@ -23,10 +24,12 @@ pub struct TestApp {
     pub app_state: AppState<UserStoreType, BannedTokenStoreType>,
     pub test_db_name: String,
     pub clean_up_called: bool,
+    _docker_env: DockerEnv,
 }
 
 impl TestApp {
     pub async fn new() -> Self {
+        let docker_env = DockerEnv::ensure();
         let (pg_pool, test_db_name) = configure_postgresql().await;
 
         let user_store = Arc::new(RwLock::new(PostgresUserStore::new(pg_pool))) as UserStoreType;
@@ -67,6 +70,7 @@ impl TestApp {
             app_state,
             test_db_name,
             clean_up_called: false,
+            _docker_env: docker_env,
         }
     }
 

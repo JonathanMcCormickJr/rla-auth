@@ -98,7 +98,7 @@ mod tests {
     use crate::{
         get_redis_client,
         services::data_stores::redis_banned_token_store::RedisBannedTokenStore,
-        utils::constants::REDIS_HOST_NAME,
+        utils::{constants::REDIS_HOST_NAME, docker_test_env::DockerEnv},
     };
     use std::sync::Arc;
 
@@ -147,6 +147,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_token_with_valid_token() {
+        let _docker_env = DockerEnv::ensure();
         let email = Email::parse(SecretString::new(
             "test@example.com".to_owned().into_boxed_str(),
         ))
@@ -166,6 +167,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_token_with_invalid_token() {
+        let _docker_env = DockerEnv::ensure();
         let token = "invalid_token".to_owned();
         let banned = RwLock::new(redis_banned_token_store());
         let result = validate_token(&token, &banned).await;

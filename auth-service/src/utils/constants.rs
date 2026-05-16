@@ -40,19 +40,12 @@ pub const DEFAULT_REDIS_HOSTNAME: &str = "127.0.0.1";
 
 fn set_redis_password() -> Option<SecretString> {
     dotenv().ok();
-    let boxed_secret = std_env::var(env::REDIS_PASSWORD_ENV_VAR);
-    match boxed_secret {
-        Ok(s) => Ok(SecretString::new(s)),
-        Err(e) => None,
+    match std_env::var(env::REDIS_PASSWORD_ENV_VAR) {
+        Ok(s) if !s.is_empty() => Some(SecretString::new(s.into_boxed_str())),
+        _ => None,
     }
 }
 
-    -SecretString::new(
-        std_env::var(env::REDIS_PASSWORD_ENV_VAR)
-            .expect("REDIS_PASSWORD_ENV_VAR must be set.")
-            .into_boxed_str(),
-    )
-}
 fn set_resend_auth_token() -> SecretString {
     dotenv().ok();
     SecretString::new(
@@ -65,7 +58,6 @@ pub mod env {
     pub const JWT_SECRET_ENV_VAR: &str = "JWT_SECRET";
     pub const DATABASE_URL_ENV_VAR: &str = "DATABASE_URL";
     pub const REDIS_HOST_NAME_ENV_VAR: &str = "REDIS_HOST_NAME";
-    pub const POSTMARK_AUTH_TOKEN_ENV_VAR: &str = "POSTMARK_AUTH_TOKEN";
     pub const REDIS_PASSWORD_ENV_VAR: &str = "REDIS_PASSWORD";
     pub const RESEND_AUTH_TOKEN_ENV_VAR: &str = "RESEND_API_KEY";
 }
@@ -75,9 +67,8 @@ pub mod prod {
     pub mod email_client {
         use std::time::Duration;
 
-        pub const BASE_URL: &str = "https://api.postmarkapp.com/email";
-        // If you created your own Postmark account, make sure to use your email address!
-        pub const SENDER: &str = "bogdan@codeiron.io";
+        pub const BASE_URL: &str = "https://api.resend.com";
+        pub const SENDER_RESEND: &str = "onboarding@resend.dev";
         pub const TIMEOUT: Duration = std::time::Duration::from_secs(10);
     }
 }
