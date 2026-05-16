@@ -1,16 +1,28 @@
-//! Test-only orchestration for the Dockerized backing services.
+//! Test-only orchestration for the backing services (Postgres + Redis).
 //!
 //! The unit and integration tests need real Postgres and Redis instances.
-//! This module lets the suite be self-contained: the first test to ask for a
-//! [`DockerEnv`] brings up the `db` and `redis` services from the repo's
-//! `compose.yml`, and once the last [`DockerEnv`] is dropped the services this
-//! process started are stopped again. It lives in the library (not behind
-//! `#[cfg(test)]`) so the separate integration-test crate can use it too.
+//! When they are already reachable this module uses them as-is — CI runs them
+//! as job service containers, and a developer may simply have them running.
+//! Otherwise the first test to ask for a [`DockerEnv`] brings up the `db` and
+//! `redis` services from the repo's `compose.yml`, and once the last
+//! [`DockerEnv`] is dropped the services this process started are stopped
+//! again. It lives in the library (not behind `#[cfg(test)]`) so the separate
+//! integration-test crate can use it too.
 
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::{Duration, Instant};
+
+use secrecy::ExposeSecret;
+use sqlx::postgres::PgConnectOptions;
+
+use crate::utils::constants::{DATABASE_URL, REDIS_HOST_NAME};
+
+/// Redis listens here unless the connection settings say otherwise.
+const DEFAULT_REDIS_PORT: u16 = 6379;
 
 /// RAII handle to the running backing services. The services stay up while at
 /// least one `DockerEnv` is alive; cloning shares the same handle.
@@ -59,12 +71,19 @@ impl DockerEnv {
 }
 
 fn start_backing_services() -> DockerEnvInner {
-    if services_ready() {
+    // Fast path: Postgres and Redis are already accepting connections at the
+    // addresses the tests use. CI runs them as job service containers, and a
+    // developer may have them up already. In both cases we must not touch
+    // Docker — `compose.yml`'s `db`/`redis` publish the same host ports, so
+    // starting them would collide with the services already bound there.
+    if backing_services_reachable() {
         return DockerEnvInner {
             started_by_us: false,
         };
     }
 
+    // Local-developer path: nothing is listening yet, so bring the services up
+    // ourselves with `docker compose` and wait for them to accept connections.
     let output = compose(&["up", "-d", "db", "redis"]).expect("failed to spawn `docker compose`");
     assert!(
         output.status.success(),
@@ -74,7 +93,7 @@ fn start_backing_services() -> DockerEnvInner {
 
     let deadline = Instant::now() + Duration::from_secs(60);
     while Instant::now() < deadline {
-        if services_ready() {
+        if compose_services_ready() {
             return DockerEnvInner {
                 started_by_us: true,
             };
@@ -84,17 +103,52 @@ fn start_backing_services() -> DockerEnvInner {
     panic!("Postgres and Redis did not become ready within 60s");
 }
 
-fn services_ready() -> bool {
-    postgres_ready() && redis_ready()
+/// Whether Postgres and Redis are already accepting TCP connections at the
+/// addresses the tests connect to (parsed from `DATABASE_URL` and
+/// `REDIS_HOST_NAME`).
+fn backing_services_reachable() -> bool {
+    postgres_reachable() && redis_reachable()
 }
 
-fn postgres_ready() -> bool {
+fn postgres_reachable() -> bool {
+    match postgres_host_port() {
+        Some((host, port)) => tcp_reachable(&host, port),
+        None => false,
+    }
+}
+
+fn redis_reachable() -> bool {
+    tcp_reachable(REDIS_HOST_NAME.as_str(), DEFAULT_REDIS_PORT)
+}
+
+/// Host and port Postgres listens on, parsed from `DATABASE_URL`. `get_port`
+/// already falls back to the standard 5432 when the URL omits the port.
+fn postgres_host_port() -> Option<(String, u16)> {
+    let opts = PgConnectOptions::from_str(DATABASE_URL.expose_secret()).ok()?;
+    Some((opts.get_host().to_owned(), opts.get_port()))
+}
+
+/// Whether any address `host:port` resolves to accepts a TCP connection within
+/// a short timeout.
+fn tcp_reachable(host: &str, port: u16) -> bool {
+    let Ok(mut addrs) = (host, port).to_socket_addrs() else {
+        return false;
+    };
+    addrs.any(|addr| TcpStream::connect_timeout(&addr, Duration::from_secs(2)).is_ok())
+}
+
+/// Whether the compose-managed `db` and `redis` containers report ready.
+fn compose_services_ready() -> bool {
+    compose_postgres_ready() && compose_redis_ready()
+}
+
+fn compose_postgres_ready() -> bool {
     compose(&["exec", "-T", "db", "pg_isready", "-U", "postgres"])
         .map(|o| o.status.success())
         .unwrap_or(false)
 }
 
-fn redis_ready() -> bool {
+fn compose_redis_ready() -> bool {
     compose(&["exec", "-T", "redis", "redis-cli", "ping"])
         .map(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).contains("PONG"))
         .unwrap_or(false)
@@ -107,14 +161,18 @@ fn compose(args: &[&str]) -> std::io::Result<Output> {
         .split_first()
         .expect("docker invocation is never empty");
 
-    Command::new(program)
-        .args(prefix)
-        .arg("compose")
-        .arg("--env-file")
-        .arg(env_file())
-        .args(args)
-        .current_dir(project_root())
-        .output()
+    let mut command = Command::new(program);
+    command.args(prefix).arg("compose");
+
+    // The auth-service `.env` supplies `compose.yml`'s variable interpolation
+    // (e.g. POSTGRES_PASSWORD). It is git-ignored, so it may be absent — only
+    // pass `--env-file` when it exists, since Docker errors on a missing one.
+    let env_file = env_file();
+    if env_file.exists() {
+        command.arg("--env-file").arg(env_file);
+    }
+
+    command.args(args).current_dir(project_root()).output()
 }
 
 /// The Docker CLI invocation that can actually reach the daemon: plain
